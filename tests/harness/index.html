@@ -22,10 +22,12 @@
       if (this._box) return;
       this._box = document.createElement("input");
       this._box.type = "checkbox";
+      this._box.checked = !!this._pending;
       this._box.addEventListener("change", () => this.dispatchEvent(new Event("change")));
       this.appendChild(this._box);
     }
-    get checked() { return this._box ? this._box.checked : false; }
+    get checked() { return this._box ? this._box.checked : !!this._pending; }
+    set checked(v) { this._pending = v; if (this._box) this._box.checked = v; }
   });
 </script>
 <script type="module" src="/custom_components/smartflow_preisampel/www/smartflow-preisampel-card.js"></script>
@@ -51,7 +53,9 @@
   };
   await customElements.whenDefined("smartflow-preisampel-card");
   const card = document.createElement("smartflow-preisampel-card");
-  card.setConfig({ entity: "sensor.preisampel_preisstufe" });
+  const params = new URLSearchParams(location.search);
+  const extra = params.get("config") ? JSON.parse(params.get("config")) : {};
+  card.setConfig({ entity: "sensor.preisampel_preisstufe", ...extra });
   document.getElementById("slot").appendChild(card);
   card.hass = hass;
   window.__card = card;

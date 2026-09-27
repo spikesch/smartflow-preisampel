@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -41,7 +41,7 @@ const TEXT = {
     unavailable: "Keine Daten: Battery SmartFlow AI läuft nicht oder ist nicht kompatibel (siehe HA-Protokoll).",
     mismatch: "Achtung: Diese BSFAI-Version rechnet die Schwellen anders als die Ampel. Die Farben können abweichen.",
     no_prices: "BSFAI hat gerade keine Preisvorschau.",
-    editor: { entity: "Preisampel-Sensor", title: "Titel", height: "Höhe", show_history: "Verlauf anzeigen (was BSFAI getan hat)", show_simulator: "Simulator anzeigen" },
+    editor: { entity: "Preisampel-Sensor", title: "Titel", height: "Höhe", show_history: "Verlauf anzeigen (was BSFAI getan hat)", show_simulator: "Simulator anzeigen", simulation_on: "Simulator beim Öffnen eingeschaltet", colors: "Farben" },
     days: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
   },
   en: {
@@ -71,16 +71,33 @@ const TEXT = {
     unavailable: "No data: Battery SmartFlow AI is not running or not compatible (see the HA log).",
     mismatch: "Warning: this BSFAI version calculates its thresholds differently. Colours may be off.",
     no_prices: "BSFAI has no price forecast right now.",
-    editor: { entity: "Price traffic light sensor", title: "Title", height: "Height", show_history: "Show history (what BSFAI did)", show_simulator: "Show simulator" },
+    editor: { entity: "Price traffic light sensor", title: "Title", height: "Height", show_history: "Show history (what BSFAI did)", show_simulator: "Show simulator", simulation_on: "Simulator switched on when opened", colors: "Colours" },
     days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   },
 };
 
 const CLASS_ORDER = ["b", "l", "m", "h", "p", "x"];
-const CLASS_COLOR = { b: "#15803d", l: "#22c55e", m: "#eab308", h: "#f97316", p: "#ef4444", x: "#991b1b" };
-const LINE_COLOR = { valley: "#1d4ed8", effective: "#7c3aed", peak: "#334155", very_expensive: "#be123c", very_cheap: "#047857" };
+const LINE_ORDER = ["valley", "effective", "peak", "very_expensive", "very_cheap"];
 const ACT_ORDER = ["c", "d", "i"];
-const ACT_COLOR = { c: "#16a34a", d: "#ea580c", i: "#94a3b8" };
+// Standardfarben; jede laesst sich in der Kartenkonfiguration unter "colors"
+// ueberschreiben (Hex-String oder [r, g, b] aus dem Farbwaehler des Editors).
+const DEFAULT_COLORS = {
+  b: "#15803d", l: "#22c55e", m: "#eab308", h: "#f97316", p: "#ef4444", x: "#991b1b",
+  valley: "#1d4ed8", effective: "#7c3aed", peak: "#334155", very_expensive: "#be123c", very_cheap: "#047857",
+  act_c: "#16a34a", act_d: "#ea580c", act_i: "#94a3b8",
+};
+
+function toHex(value) {
+  if (Array.isArray(value) && value.length === 3) {
+    return "#" + value.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+  }
+  return typeof value === "string" && value ? value : null;
+}
+
+function fromHex(hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : undefined;
+}
 const BAND_MAX = 14; // Band hat den Wert 1, nimmt also 1/14 der Hoehe ein
 const MARKER_COLOR = "#0f172a";
 
@@ -171,9 +188,13 @@ class SmartflowPreisampelCard extends HTMLElement {
 
   setConfig(config) {
     if (!config || !config.entity) throw new Error("entity required");
-    this._config = { height: 420, show_history: true, show_simulator: true, ...config };
+    this._config = { height: 420, show_history: true, show_simulator: true, simulation_on: true, ...config };
     this._built = false;
     if (this._hass) this._render();
+  }
+
+  _c(key) {
+    return toHex((this._config.colors || {})[key]) || DEFAULT_COLORS[key];
   }
 
   getCardSize() {
@@ -236,7 +257,7 @@ class SmartflowPreisampelCard extends HTMLElement {
         .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
         .legend i.line { height: 3px; border-radius: 0; }
         #chart { width: 100%; min-height: 50px; }
-        .sim { border-top: 1px solid var(--divider-color); margin-top: 6px; padding-top: 8px; }
+        .sim { border-top: 1px solid var(--divider-color); margin-top: 6px; padding-top: 8px; max-width: 640px; }
         .sim-head { display: flex; align-items: center; gap: 10px; font-weight: 500; }
         .sim-hint { color: var(--secondary-text-color); font-size: .9em; margin: 4px 0 6px; }
         .row { display: grid; grid-template-columns: minmax(130px, 1fr) 3fr 90px; gap: 10px; align-items: center; margin: 4px 0; }
@@ -315,7 +336,8 @@ class SmartflowPreisampelCard extends HTMLElement {
         avg_charge_price: L.avg_charge_price,
         feed_in: L.feed_in,
       };
-      v = { p: L.p, ...ladder(L.p, s), very_cheap: s.very_cheap, very_expensive: s.very_expensive, sim: true };
+      v = { p: L.p, ...ladder(L.p, s), very_cheap: s.very_cheap, very_expensive: s.very_expensive,
+        sim: !!this._sim.touched };
     }
     const t0 = Date.parse(L.start);
     const step = (L.step_min || 15) * 60000;
@@ -375,16 +397,16 @@ class SmartflowPreisampelCard extends HTMLElement {
         return [x(i), on ? v * f : null];
       });
       series.push({ name: `cls_${k}`, type: "area", data });
-      meta.push({ kind: "class", key: k, color: CLASS_COLOR[k], label: t.classes[k], count: counts[k] });
+      meta.push({ kind: "class", key: k, color: this._c(k), label: t.classes[k], count: counts[k] });
     }
     for (const key of ["valley", "effective", "peak"]) {
       series.push({ name: key, type: "line", data: V[key].map((v, i) => [x(i), v * f]) });
-      meta.push({ kind: "line", key, color: LINE_COLOR[key], label: t[key], dash: 7 });
+      meta.push({ kind: "line", key, color: this._c(key), label: t[key], dash: 7 });
     }
     for (const key of ["very_expensive", "very_cheap"]) {
       const val = V[key] > 0 ? V[key] * f : null;
       series.push({ name: key, type: "line", data: V.p.map((_, i) => [x(i), val]) });
-      meta.push({ kind: "line", key, color: LINE_COLOR[key], label: t[key], dash: 14, hideIfEmpty: val === null });
+      meta.push({ kind: "line", key, color: this._c(key), label: t[key], dash: 14, hideIfEmpty: val === null });
     }
     const act = this._config.show_history ? this._act : null;
     for (const k of ACT_ORDER) {
@@ -395,7 +417,7 @@ class SmartflowPreisampelCard extends HTMLElement {
         return [x(i), on ? 1 : null];
       });
       series.push({ name: `act_${k}`, type: "area", data });
-      meta.push({ kind: "band", key: k, color: ACT_COLOR[k], label: `${t.did}: ${t.act[k]}`, count, hideIfEmpty: !act });
+      meta.push({ kind: "band", key: k, color: this._c(`act_${k}`), label: `${t.did}: ${t.act[k]}`, count, hideIfEmpty: !act });
     }
     series.push({
       name: "changes", type: "column",
@@ -540,15 +562,15 @@ class SmartflowPreisampelCard extends HTMLElement {
       `<div style="display:flex;gap:12px;justify-content:space-between;${extra || ""}${color ? `color:${color};font-weight:600;` : "opacity:.75;"}"><span>${label}</span><span style="font-variant-numeric:tabular-nums;">${value}</span></div>`;
     let html = `<div style="padding:8px 11px;line-height:1.6;min-width:210px;max-width:320px;white-space:normal;color:var(--primary-text-color);background:var(--card-background-color);">`
       + `<div style="opacity:.65;font-size:.9em;">${t.days[d.getDay()]} ${z(d.getDate())}.${z(d.getMonth() + 1)}. ${z(d.getHours())}:${z(d.getMinutes())}${V.sim ? ` · ${t.simulation}` : ""}</div>`
-      + `<div style="display:flex;gap:12px;justify-content:space-between;font-weight:600;"><span>${t.price} <span style="color:${CLASS_COLOR[k]};">${t.classes[k]}</span></span><span style="font-variant-numeric:tabular-nums;">${this._fmt(V.p[i], V.unit)}</span></div>`
-      + row(t.valley, this._fmt(V.valley[i], V.unit), charge ? ACT_COLOR.c : null)
-      + row(t.effective, this._fmt(V.effective[i], V.unit), discharge ? ACT_COLOR.d : null);
+      + `<div style="display:flex;gap:12px;justify-content:space-between;font-weight:600;"><span>${t.price} <span style="color:${this._c(k)};">${t.classes[k]}</span></span><span style="font-variant-numeric:tabular-nums;">${this._fmt(V.p[i], V.unit)}</span></div>`
+      + row(t.valley, this._fmt(V.valley[i], V.unit), charge ? this._c("act_c") : null)
+      + row(t.effective, this._fmt(V.effective[i], V.unit), discharge ? this._c("act_d") : null);
     const act = this._config.show_history ? this._act : null;
     if (act && i <= V.nowIndex) {
       const a = act.states[i];
       const sep = "border-top:1px solid rgba(127,127,127,.3);margin-top:5px;padding-top:5px;";
       if (act.soc[i] !== null && act.soc[i] !== undefined) html += row(t.soc, `${Math.round(act.soc[i])} %`, null, sep);
-      if (a && a !== "-") html += row(t.did, t.act[a], ACT_COLOR[a], act.soc[i] == null ? sep : "");
+      if (a && a !== "-") html += row(t.did, t.act[a], this._c(`act_${a}`), act.soc[i] == null ? sep : "");
       if (act.reasons[i]) html += `<div style="opacity:.75;font-size:.9em;">${act.reasons[i]}</div>`;
     }
     return `${html}</div>`;
@@ -664,6 +686,11 @@ class SmartflowPreisampelCard extends HTMLElement {
     });
     box.querySelector(".apply").addEventListener("click", () => this._apply());
     this._syncSimulatorFromReal(true);
+    // Standard: Simulator an. Solange niemand schiebt, stehen die Schieber auf
+    // den echten Werten - das Bild ist dann identisch mit dem echten.
+    this._sim.on = this._config.simulation_on !== false;
+    sw.checked = this._sim.on;
+    rows.classList.toggle("disabled", !this._sim.on);
   }
 
   _real(key) {
@@ -731,25 +758,54 @@ class SmartflowPreisampelCardEditor extends HTMLElement {
 
   _draw() {
     if (!this._hass || !this._config) return;
-    const t = TEXT[lang(this._hass)].editor;
+    const T = TEXT[lang(this._hass)];
+    const t = T.editor;
+    const labels = { ...t, ...T.classes };
+    for (const key of LINE_ORDER) labels[key] = T[key];
+    for (const k of ACT_ORDER) labels[`act_${k}`] = `${T.did}: ${T.act[k]}`;
     if (!this._form) {
       this._form = document.createElement("ha-form");
-      this._form.computeLabel = (schema) => t[schema.name] || schema.name;
+      this._form.computeLabel = (schema) => labels[schema.name] || schema.name;
       this._form.addEventListener("value-changed", (ev) => {
-        this._config = ev.detail.value;
+        this._config = this._clean(ev.detail.value);
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
       });
       this.appendChild(this._form);
     }
+    // Der Farbwaehler zeigt immer die wirksame Farbe, also Standard oder eigene.
+    const colors = {};
+    for (const key of Object.keys(DEFAULT_COLORS)) {
+      const own = (this._config.colors || {})[key];
+      colors[key] = Array.isArray(own) ? own : fromHex(toHex(own) || DEFAULT_COLORS[key]);
+    }
+    const color = (name) => ({ name, selector: { color_rgb: {} } });
     this._form.hass = this._hass;
-    this._form.data = { height: 420, show_history: true, show_simulator: true, ...this._config };
+    this._form.data = { height: 420, show_history: true, show_simulator: true, simulation_on: true, ...this._config, colors };
     this._form.schema = [
       { name: "entity", required: true, selector: { entity: { filter: { integration: "smartflow_preisampel", domain: "sensor" } } } },
       { name: "title", selector: { text: {} } },
       { name: "height", selector: { number: { min: 250, max: 900, step: 10, mode: "box", unit_of_measurement: "px" } } },
       { name: "show_history", selector: { boolean: {} } },
       { name: "show_simulator", selector: { boolean: {} } },
+      { name: "simulation_on", selector: { boolean: {} } },
+      {
+        type: "expandable", name: "colors", title: t.colors, icon: "mdi:palette",
+        schema: [...CLASS_ORDER, ...LINE_ORDER, ...ACT_ORDER.map((k) => `act_${k}`)].map(color),
+      },
     ];
+  }
+
+  /* Nur Farben speichern, die vom Standard abweichen - sonst stuende nach jeder
+   * Aenderung die komplette Farbtabelle in der Kartenkonfiguration. */
+  _clean(config) {
+    const out = { ...config };
+    const own = {};
+    for (const [key, value] of Object.entries(config.colors || {})) {
+      const hex = toHex(value);
+      if (hex && hex.toLowerCase() !== DEFAULT_COLORS[key]) own[key] = hex;
+    }
+    if (Object.keys(own).length) out.colors = own; else delete out.colors;
+    return out;
   }
 }
 
