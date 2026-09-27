@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SmartFlow price traffic light",
+        "description": "Visualises the price levels and decisions of a running Battery SmartFlow AI instance and lets you try its price settings in a simulator. Prices, currency and settings are taken from the selected instance.",
+        "data": {
+          "bsfai_entry_id": "Battery SmartFlow AI instance"
+        }
+      }
+    },
+    "abort": {
+      "bsfai_missing": "Battery SmartFlow AI is not installed or not set up. Install and configure it first.",
+      "bsfai_not_running": "Battery SmartFlow AI is set up but not running. Check its status under Settings > Devices & services.",
+      "already_configured": "This Battery SmartFlow AI instance already has a price traffic light."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "preisstufe": {
+        "name": "Price level",
+        "state": {
+          "b": "Very cheap",
+          "l": "Valley price",
+          "m": "Neutral",
+          "h": "Expensive",
+          "p": "Peak",
+          "x": "Very expensive"
+        }
+      }
+    }
+  }
+}

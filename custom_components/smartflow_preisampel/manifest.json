@@ -1,0 +1,12 @@
+{
+  "domain": "smartflow_preisampel",
+  "name": "SmartFlow Preisampel",
+  "after_dependencies": ["battery_smartflow_ai"],
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["http", "frontend"],
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "requirements": [],
+  "version": "0.1.0"
+}

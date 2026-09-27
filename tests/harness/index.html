@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Preisampel Prüfstand</title>
+<style>
+  :root { --primary-text-color: #1f2937; --secondary-text-color: #6b7280; --card-background-color: #fff;
+          --divider-color: #e5e7eb; --primary-color: #03a9f4; --text-primary-color: #fff; }
+  body { font-family: Roboto, Arial, sans-serif; background: #f3f4f6; margin: 16px; }
+  #slot { max-width: 1100px; }
+  ha-card { display: block; background: var(--card-background-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  #log { font: 12px monospace; white-space: pre-wrap; margin-top: 12px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
+<script>
+  // apexcharts-card nur als leere Huelle: die echte Karte stellt ApexCharts
+  // global bereit, genau das braucht die Preisampel.
+  customElements.define("apexcharts-card", class extends HTMLElement {});
+  customElements.define("ha-card", class extends HTMLElement {});
+  customElements.define("ha-switch", class extends HTMLElement {
+    connectedCallback() {
+      if (this._box) return;
+      this._box = document.createElement("input");
+      this._box.type = "checkbox";
+      this._box.addEventListener("change", () => this.dispatchEvent(new Event("change")));
+      this.appendChild(this._box);
+    }
+    get checked() { return this._box ? this._box.checked : false; }
+  });
+</script>
+<script type="module" src="/custom_components/smartflow_preisampel/www/smartflow-preisampel-card.js"></script>
+</head>
+<body>
+<div id="slot"></div>
+<div id="log"></div>
+<script type="module">
+  const log = (m) => { document.getElementById("log").textContent += m + "\n"; };
+  window.__calls = [];
+  const snap = await (await fetch("snapshot.json")).json();
+  const fixed = Date.parse(snap.now);
+  Date.now = () => fixed;
+  window.confirm = () => true;
+  const hass = {
+    states: snap.states,
+    locale: { language: new URLSearchParams(location.search).get("lang") || "de" },
+    language: "de",
+    themes: { darkMode: false },
+    callWS: async (msg) => { log("callWS " + msg.type); return snap.history; },
+    callService: async (domain, service, data) => { window.__calls.push({ domain, service, data }); log(`callService ${domain}.${service} ${JSON.stringify(data)}`); },
+    formatEntityState: (st, raw) => raw,
+  };
+  await customElements.whenDefined("smartflow-preisampel-card");
+  const card = document.createElement("smartflow-preisampel-card");
+  card.setConfig({ entity: "sensor.preisampel_preisstufe" });
+  document.getElementById("slot").appendChild(card);
+  card.hass = hass;
+  window.__card = card;
+  window.__hass = hass;
+  log("Karte erstellt");
+</script>
+</body>
+</html>

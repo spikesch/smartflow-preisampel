@@ -1,0 +1,33 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SmartFlow Preisampel",
+        "description": "Zeigt die Preisstufen und Entscheidungen einer laufenden Battery-SmartFlow-AI-Instanz und lässt ihre Preisregler im Simulator ausprobieren. Preise, Währung und Regler kommen aus der gewählten Instanz.",
+        "data": {
+          "bsfai_entry_id": "Battery-SmartFlow-AI-Instanz"
+        }
+      }
+    },
+    "abort": {
+      "bsfai_missing": "Battery SmartFlow AI ist nicht installiert oder nicht eingerichtet. Bitte zuerst installieren und konfigurieren.",
+      "bsfai_not_running": "Battery SmartFlow AI ist eingerichtet, läuft aber nicht. Status unter Einstellungen > Geräte & Dienste prüfen.",
+      "already_configured": "Für diese Battery-SmartFlow-AI-Instanz gibt es schon eine Preisampel."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "preisstufe": {
+        "name": "Preisstufe",
+        "state": {
+          "b": "Sehr billig",
+          "l": "Talpreis",
+          "m": "Neutral",
+          "h": "Teuer",
+          "p": "Peak",
+          "x": "Sehr teuer"
+        }
+      }
+    }
+  }
+}
