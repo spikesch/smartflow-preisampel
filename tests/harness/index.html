@@ -16,6 +16,8 @@
   // apexcharts-card nur als leere Huelle: die echte Karte stellt ApexCharts
   // global bereit, genau das braucht die Preisampel.
   customElements.define("apexcharts-card", class extends HTMLElement {});
+  // Die Karte registriert sich erst, wenn das HA-Frontend steht.
+  customElements.define("home-assistant", class extends HTMLElement {});
   customElements.define("ha-card", class extends HTMLElement {});
   customElements.define("ha-switch", class extends HTMLElement {
     connectedCallback() {

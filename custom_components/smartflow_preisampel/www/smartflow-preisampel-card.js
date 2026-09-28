@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -230,13 +230,24 @@ class SmartflowPreisampelCard extends HTMLElement {
     return TEXT[lang(this._hass)];
   }
 
+  /* HA uebergibt Konfiguration und hass, BEVOR die Karte im Dokument haengt.
+   * Das Diagramm wird deshalb erst hier angelegt bzw. nachgeholt - ApexCharts
+   * bricht mit "Element not found" ab, wenn sein Container nicht verbunden ist. */
   connectedCallback() {
+    if (!this._built) return;
     if (this._chart && this._resizeTarget) this._observe();
+    else this._update();
+    this._startHistoryTimer();
   }
 
   disconnectedCallback() {
     if (this._ro) { this._ro.disconnect(); this._ro = null; }
     if (this._historyTimer) { clearInterval(this._historyTimer); this._historyTimer = null; }
+  }
+
+  _startHistoryTimer() {
+    if (!this._config.show_history || this._historyTimer) return;
+    this._historyTimer = setInterval(() => this._loadHistory(), 5 * 60 * 1000);
   }
 
   async _render() {
@@ -260,9 +271,15 @@ class SmartflowPreisampelCard extends HTMLElement {
         .sim { border-top: 1px solid var(--divider-color); margin-top: 6px; padding-top: 8px; max-width: 640px; }
         .sim-head { display: flex; align-items: center; gap: 10px; font-weight: 500; }
         .sim-hint { color: var(--secondary-text-color); font-size: .9em; margin: 4px 0 6px; }
-        .row { display: grid; grid-template-columns: minmax(130px, 1fr) 3fr 90px; gap: 10px; align-items: center; margin: 4px 0; }
-        .row input[type=range] { width: 100%; accent-color: var(--primary-color); }
-        .row .val { text-align: right; font-variant-numeric: tabular-nums; }
+        .sim { container-type: inline-size; }
+        .row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 3fr) auto; gap: 4px 10px; align-items: center; margin: 4px 0; }
+        .row input[type=range] { width: 100%; min-width: 0; margin: 0; accent-color: var(--primary-color); }
+        .row .val { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        /* Schmal (Handy): Beschriftung und Wert oben, Schieber darunter in voller Breite */
+        @container (max-width: 480px) {
+          .row { grid-template-columns: 1fr auto; margin: 8px 0; }
+          .row input[type=range] { grid-column: 1 / -1; grid-row: 2; }
+        }
         .buttons { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; flex-wrap: wrap; }
         button { font: inherit; padding: 6px 14px; border-radius: 18px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); cursor: pointer; }
         button.primary { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
@@ -298,7 +315,7 @@ class SmartflowPreisampelCard extends HTMLElement {
     this._update();
     if (this._config.show_history) {
       this._loadHistory();
-      this._historyTimer = setInterval(() => this._loadHistory(), 5 * 60 * 1000);
+      if (this.isConnected) this._startHistoryTimer();
     }
   }
 
@@ -371,6 +388,7 @@ class SmartflowPreisampelCard extends HTMLElement {
     const { series, meta } = this._series(V);
     this._meta = meta;
     this._legend(V, meta);
+    if (!this.isConnected) return; // Diagramm kommt in connectedCallback
     if (!this._chart) this._create(series, V);
     else {
       this._chart.updateOptions(this._dynamicOptions(V, meta), false, false, false);
@@ -528,9 +546,15 @@ class SmartflowPreisampelCard extends HTMLElement {
       tooltip: { shared: true, intersect: false, custom: ({ dataPointIndex }) => this._tooltip(dataPointIndex) },
       ...this._dynamicOptions(V, meta),
     };
-    this._chart = new globalThis.ApexCharts(el, options);
-    this._chart.render();
+    const chart = new globalThis.ApexCharts(el, options);
+    this._chart = chart;
     this._resizeTarget = el;
+    // Scheitert der Aufbau, das halbe Objekt verwerfen - sonst wirft jede
+    // spaetere Aktualisierung (forceYAxisUpdate) und das Diagramm kommt nie.
+    chart.render().catch((err) => {
+      if (this._chart === chart) this._chart = null;
+      console.warn("smartflow-preisampel: Diagramm-Aufbau fehlgeschlagen, neuer Versuch folgt", err);
+    });
     this._observe();
   }
 
@@ -809,16 +833,38 @@ class SmartflowPreisampelCardEditor extends HTMLElement {
   }
 }
 
-if (!customElements.get(CARD)) customElements.define(CARD, SmartflowPreisampelCard);
-if (!customElements.get(EDITOR)) customElements.define(EDITOR, SmartflowPreisampelCardEditor);
-
-window.customCards = window.customCards || [];
-if (!window.customCards.some((c) => c.type === CARD)) {
-  window.customCards.push({
-    type: CARD,
-    name: "SmartFlow Preisampel",
-    description: "Price levels, thresholds and decisions of Battery SmartFlow AI, with simulator.",
-    preview: false,
-  });
+/*
+ * Registrierung erst, wenn das HA-Frontend steht.
+ *
+ * Die Integration laedt diese Datei als extra_module_url - sie kommt damit oft
+ * VOR dem HA-Kern an. Der Kern installiert beim Start einen Polyfill fuer
+ * "scoped custom element registries", der window.customElements durch eine
+ * eigene Registry ersetzt. Was vorher definiert wurde, kennt deren get() nicht:
+ * HA meldet dann "Custom element doesn't exist", obwohl die Klasse nativ
+ * registriert ist - je nach Ladereihenfolge bei jedem 2. bis 4. Laden.
+ * Sobald "home-assistant" in der (dann gueltigen) Registry steht, ist der
+ * Polyfill sicher aktiv. Nach 15 s wird trotzdem registriert, damit die Karte
+ * auch ausserhalb der normalen HA-Oberflaeche funktioniert.
+ */
+function register() {
+  if (!customElements.get(CARD)) customElements.define(CARD, SmartflowPreisampelCard);
+  if (!customElements.get(EDITOR)) customElements.define(EDITOR, SmartflowPreisampelCardEditor);
+  window.customCards = window.customCards || [];
+  if (!window.customCards.some((c) => c.type === CARD)) {
+    window.customCards.push({
+      type: CARD,
+      name: "SmartFlow Preisampel",
+      description: "Price levels, thresholds and decisions of Battery SmartFlow AI, with simulator.",
+      preview: false,
+    });
+  }
+  console.info(`%c SMARTFLOW-PREISAMPEL %c v${VERSION} `, "background:#16a34a;color:#fff;border-radius:3px 0 0 3px", "background:#334155;color:#fff;border-radius:0 3px 3px 0");
 }
-console.info(`%c SMARTFLOW-PREISAMPEL %c v${VERSION} `, "background:#16a34a;color:#fff;border-radius:3px 0 0 3px", "background:#334155;color:#fff;border-radius:0 3px 3px 0");
+
+(function waitForFrontend(started) {
+  if (window.customElements.get("home-assistant") || Date.now() - started > 15000) {
+    register();
+    return;
+  }
+  setTimeout(() => waitForFrontend(started), 25);
+})(Date.now());
