@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.4";
+const VERSION = "0.1.5";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -285,6 +285,7 @@ class SmartflowPreisampelCard extends HTMLElement {
         .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
         .title { font-size: 1.2em; font-weight: 500; }
         .now { color: var(--secondary-text-color); font-size: .95em; }
+        .now .level { font-weight: 600; }
         .warn { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgba(234,88,12,.12); color: var(--primary-text-color); border-left: 4px solid #ea580c; }
         .info { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgba(29,78,216,.10); border-left: 4px solid #1d4ed8; }
         .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0 2px; font-size: .9em; }
@@ -405,10 +406,17 @@ class SmartflowPreisampelCard extends HTMLElement {
     this._V = V;
 
     const nowCls = V.nowIndex >= 0 ? V.cls[V.nowIndex] : null;
+    // "jetzt:" bleibt gedeckt, Stufe und Preis tragen die Farbe der Stufe
+    // (dieselbe wie im Diagramm, eigene Farben eingeschlossen).
     const nowText = this.shadowRoot.querySelector(".now");
-    nowText.textContent = nowCls
-      ? `${t.now}: ${t.classes[nowCls]} · ${this._fmt(V.p[V.nowIndex], V.unit)}${V.sim ? ` · ${t.simulation}` : ""}`
-      : "";
+    nowText.textContent = "";
+    if (nowCls) {
+      const level = document.createElement("span");
+      level.className = "level";
+      level.style.color = this._c(nowCls);
+      level.textContent = `${t.classes[nowCls]} · ${this._fmt(V.p[V.nowIndex], V.unit)}`;
+      nowText.append(`${t.now}: `, level, V.sim ? ` · ${t.simulation}` : "");
+    }
 
     const { series, meta } = this._series(V);
     this._meta = meta;
