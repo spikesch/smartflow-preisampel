@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/spikesch/smartflow-preisampel/main/custom_components/smartflow_preisampel/brand/dark_logo@2x.png">
+  <img src="https://raw.githubusercontent.com/spikesch/smartflow-preisampel/main/custom_components/smartflow_preisampel/brand/logo@2x.png" alt="SmartFlow Preisampel" height="96">
+</picture>
+
 # SmartFlow Preisampel
 
 **Deutsch** · [English](README.en.md)
