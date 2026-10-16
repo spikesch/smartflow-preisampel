@@ -10,6 +10,9 @@
   #slot { max-width: 1100px; }
   ha-card { display: block; background: var(--card-background-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
   #log { font: 12px monospace; white-space: pre-wrap; margin-top: 12px; }
+  /* ?shot: Bild fuer die README - ohne Protokoll, durchsichtiger Hintergrund */
+  body.shot { background: transparent; margin: 12px; }
+  body.shot #log { display: none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
 <script>
@@ -39,6 +42,7 @@
 <div id="log"></div>
 <script type="module">
   const log = (m) => { document.getElementById("log").textContent += m + "\n"; };
+  if (new URLSearchParams(location.search).has("shot")) document.body.classList.add("shot");
   window.__calls = [];
   const snap = await (await fetch("snapshot.json")).json();
   const fixed = Date.parse(snap.now);

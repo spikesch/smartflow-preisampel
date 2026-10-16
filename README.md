@@ -11,6 +11,18 @@ einstuft – von „sehr billig“ bis „sehr teuer“ – und mit welchen Schw
 Mit dem eingebauten Simulator probierst du die Preis-Regler von BSFAI aus, ohne dass sich an der
 Steuerung etwas ändert.
 
+## So sieht sie aus
+
+Zwei Stile, im Karten-Editor per Schalter umschaltbar:
+
+**Standard** – folgt dem Design deines Dashboards (hell oder dunkel)
+
+![Preisampel im Standard-Stil](https://raw.githubusercontent.com/spikesch/smartflow-preisampel/main/docs/preisampel-standard-de.png)
+
+**BSFAI-Stil** – immer dunkel, in den Farben des Dashboards von Battery SmartFlow AI
+
+![Preisampel im BSFAI-Stil](https://raw.githubusercontent.com/spikesch/smartflow-preisampel/main/docs/preisampel-bsfai-de.png)
+
 ## Was sie zeigt
 
 - **Preisstufen** als Farbflächen je 15-Minuten-Abschnitt: sehr billig · Talpreis · neutral · teuer · Peak · sehr teuer
@@ -20,6 +32,7 @@ Steuerung etwas ändert.
   Die Farben folgen sofort den Schiebern, BSFAI regelt währenddessen mit seinen echten Werten weiter.
   Erst **„In BSFAI übernehmen“** schreibt die geänderten Werte – nach einer Rückfrage – in die Regler von BSFAI.
 - **Sensor „Preisstufe“** mit der aktuellen Stufe, z. B. für eigene Automationen
+- **Zwei Stile**: Standard (folgt dem HA-Design) oder BSFAI-Stil (dunkel wie das Dashboard von Battery SmartFlow AI)
 - **Selbsttest**: Die Preisampel vergleicht ihre Schwellen laufend mit den Live-Werten von BSFAI und warnt auf der Karte,
   falls eine BSFAI-Version anders rechnet
 

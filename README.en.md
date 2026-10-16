@@ -10,6 +10,18 @@ The price traffic light shows as a chart how Battery SmartFlow AI (BSFAI) rates 
 prices – from “very cheap” to “very expensive” – and which thresholds it uses to charge and discharge.
 The built-in simulator lets you try BSFAI's price settings without changing how your battery is controlled.
 
+## What it looks like
+
+Two styles, switchable with a toggle in the card editor:
+
+**Standard** – follows your dashboard theme (light or dark)
+
+![Price traffic light, standard style](https://raw.githubusercontent.com/spikesch/smartflow-preisampel/main/docs/preisampel-standard-en.png)
+
+**BSFAI style** – always dark, in the colours of the Battery SmartFlow AI dashboard
+
+![Price traffic light, BSFAI style](https://raw.githubusercontent.com/spikesch/smartflow-preisampel/main/docs/preisampel-bsfai-en.png)
+
 ## What it shows
 
 - **Price levels** as coloured areas per 15-minute slot: very cheap · valley · neutral · expensive · peak · very expensive
@@ -20,6 +32,7 @@ The built-in simulator lets you try BSFAI's price settings without changing how 
   The colours follow the sliders instantly while BSFAI keeps running on its real settings.
   Only **“Apply to BSFAI”** writes the changed values – after asking you – to BSFAI's settings.
 - **“Price level” sensor** with the current level, e.g. for your own automations
+- **Two styles**: standard (follows the HA theme) or BSFAI style (dark, like the Battery SmartFlow AI dashboard)
 - **Self-test**: the price traffic light continuously compares its thresholds with BSFAI's live values and
   shows a warning on the card if a BSFAI version calculates differently
 
