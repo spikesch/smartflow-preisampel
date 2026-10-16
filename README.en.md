@@ -71,10 +71,11 @@ entity: sensor.preisampel_battery_smartflow_ai_preisstufe
 | `entity` | – | Price level sensor of the price traffic light (required) |
 | `title` | “Price traffic light” | Card title |
 | `height` | `420` | Chart height in pixels (250–900) |
+| `bsfai_style` | `false` | **BSFAI style**: dark card using the colours of the Battery SmartFlow AI dashboard, independent of the HA theme |
 | `show_history` | `true` | Show the history bar (what BSFAI did) |
 | `show_simulator` | `true` | Show the simulator |
 | `simulation_on` | `true` | Simulator switched on when the card opens |
-| `colors` | – | Custom colours as hex values, in the card editor under “Colours” |
+| `colors` | – | Custom colours as hex values, in the card editor under “Colours” – apply to both styles |
 
 Colour keys: `b` `l` `m` `h` `p` `x` (price levels), `valley` `effective` `peak` `very_cheap` `very_expensive`
 (lines), `act_c` `act_d` `act_i` (history: charging, discharging, idle).

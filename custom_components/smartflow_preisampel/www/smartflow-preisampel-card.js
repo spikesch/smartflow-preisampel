@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.2";
+const VERSION = "0.1.3";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -41,7 +41,7 @@ const TEXT = {
     unavailable: "Keine Daten: Battery SmartFlow AI läuft nicht oder ist nicht kompatibel (siehe HA-Protokoll).",
     mismatch: "Achtung: Diese BSFAI-Version rechnet die Schwellen anders als die Ampel. Die Farben können abweichen.",
     no_prices: "BSFAI hat gerade keine Preisvorschau.",
-    editor: { entity: "Preisampel-Sensor", title: "Titel", height: "Höhe", show_history: "Verlauf anzeigen (was BSFAI getan hat)", show_simulator: "Simulator anzeigen", simulation_on: "Simulator beim Öffnen eingeschaltet", colors: "Farben" },
+    editor: { entity: "Preisampel-Sensor", title: "Titel", height: "Höhe", bsfai_style: "BSFAI-Stil (dunkel wie das Dashboard von Battery SmartFlow AI)", show_history: "Verlauf anzeigen (was BSFAI getan hat)", show_simulator: "Simulator anzeigen", simulation_on: "Simulator beim Öffnen eingeschaltet", colors: "Farben" },
     days: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
   },
   en: {
@@ -71,7 +71,7 @@ const TEXT = {
     unavailable: "No data: Battery SmartFlow AI is not running or not compatible (see the HA log).",
     mismatch: "Warning: this BSFAI version calculates its thresholds differently. Colours may be off.",
     no_prices: "BSFAI has no price forecast right now.",
-    editor: { entity: "Price traffic light sensor", title: "Title", height: "Height", show_history: "Show history (what BSFAI did)", show_simulator: "Show simulator", simulation_on: "Simulator switched on when opened", colors: "Colours" },
+    editor: { entity: "Price traffic light sensor", title: "Title", height: "Height", bsfai_style: "BSFAI style (dark, like the Battery SmartFlow AI dashboard)", show_history: "Show history (what BSFAI did)", show_simulator: "Show simulator", simulation_on: "Simulator switched on when opened", colors: "Colours" },
     days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   },
 };
@@ -86,6 +86,19 @@ const DEFAULT_COLORS = {
   valley: "#1d4ed8", effective: "#7c3aed", peak: "#334155", very_expensive: "#be123c", very_cheap: "#047857",
   act_c: "#16a34a", act_d: "#ea580c", act_i: "#94a3b8",
 };
+
+// BSFAI-Stil: Farben aus dem Dashboard von Battery SmartFlow AI (hems-dashboard.js).
+// Ergaenzt ist nur "teuer" (h), damit es zwischen Gelb und Koralle liegt.
+const BSFAI_COLORS = {
+  b: "#25914d", l: "#56cf83", m: "#f0c34e", h: "#e8964a", p: "#f0765b", x: "#c44830",
+  valley: "#16c4df", effective: "#f4d78b", peak: "#b7c4ce", very_expensive: "#f2aaaa", very_cheap: "#a8e5ba",
+  act_c: "#1bb7df", act_d: "#f0c34e", act_i: "#59616a",
+};
+const BSFAI_TEXT = "#e7e9eb";
+
+function palette(bsfai) {
+  return bsfai ? BSFAI_COLORS : DEFAULT_COLORS;
+}
 
 function toHex(value) {
   if (Array.isArray(value) && value.length === 3) {
@@ -194,7 +207,7 @@ class SmartflowPreisampelCard extends HTMLElement {
   }
 
   _c(key) {
-    return toHex((this._config.colors || {})[key]) || DEFAULT_COLORS[key];
+    return toHex((this._config.colors || {})[key]) || palette(this._config.bsfai_style)[key];
   }
 
   getCardSize() {
@@ -257,6 +270,18 @@ class SmartflowPreisampelCard extends HTMLElement {
       <style>
         :host { display: block; }
         ha-card { display: block; padding: 12px 12px 8px; }
+        /* BSFAI-Stil: immer dunkel, Werte aus dem Dashboard von Battery SmartFlow AI */
+        ha-card.bsfai {
+          --primary-text-color: #e7e9eb; --secondary-text-color: #a4a9af; --divider-color: #34383d;
+          --primary-color: #16c4df; --card-background-color: #1b1e21; --ha-card-background: #1b1e21;
+          --text-primary-color: #dff8ff; --switch-checked-color: #16c4df; --switch-checked-button-color: #16c4df;
+          --switch-checked-track-color: #16c4df;
+          background: #1b1e21; color: #e7e9eb; border: 1px solid #34383d; border-radius: 14px;
+          font-family: Inter, "Segoe UI", sans-serif; padding: 16px 16px 12px;
+        }
+        ha-card.bsfai .title { font-weight: 650; letter-spacing: -.01em; }
+        ha-card.bsfai button { border-radius: 7px; background: #25292d; border-color: #41464b; color: #c4c8cc; }
+        ha-card.bsfai button.primary { background: #153746; border-color: #247b9b; color: #dff8ff; }
         .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
         .title { font-size: 1.2em; font-weight: 500; }
         .now { color: var(--secondary-text-color); font-size: .95em; }
@@ -286,7 +311,7 @@ class SmartflowPreisampelCard extends HTMLElement {
         button:disabled { opacity: .4; cursor: default; }
         .rows.disabled { opacity: .45; pointer-events: none; }
       </style>
-      <ha-card>
+      <ha-card class="${this._config.bsfai_style ? "bsfai" : ""}">
         <div class="head"><div class="title"></div><div class="now"></div></div>
         <div class="msg"></div>
         <div class="legend"></div>
@@ -445,7 +470,7 @@ class SmartflowPreisampelCard extends HTMLElement {
         return [x(i), on ? v * f : null];
       }),
     });
-    meta.push({ kind: "marker", key: "changes", color: MARKER_COLOR, label: "", hideIfEmpty: true });
+    meta.push({ kind: "marker", key: "changes", color: this._config.bsfai_style ? BSFAI_TEXT : MARKER_COLOR, label: "", hideIfEmpty: true });
     return { series, meta };
   }
 
@@ -507,6 +532,7 @@ class SmartflowPreisampelCard extends HTMLElement {
   }
 
   _fg() {
+    if (this._config.bsfai_style) return BSFAI_TEXT;
     return getComputedStyle(this).getPropertyValue("--primary-text-color").trim() || "#333";
   }
 
@@ -524,7 +550,7 @@ class SmartflowPreisampelCard extends HTMLElement {
           tools: { zoom: true, pan: true, reset: true, zoomin: false, zoomout: false, download: false, selection: false } },
         redrawOnParentResize: true, redrawOnWindowResize: true,
       },
-      theme: { mode: this._hass.themes?.darkMode ? "dark" : "light" },
+      theme: { mode: this._config.bsfai_style || this._hass.themes?.darkMode ? "dark" : "light" },
       series,
       colors: meta.map((m) => m.color),
       stroke: {
@@ -532,16 +558,23 @@ class SmartflowPreisampelCard extends HTMLElement {
         dashArray: meta.map((m) => (m.kind === "line" ? m.dash : 0)),
         curve: meta.map((m) => (m.kind === "marker" ? "straight" : "stepline")),
       },
-      fill: {
-        type: meta.map((m) => (m.kind === "class" ? "gradient" : "solid")),
-        opacity: meta.map((m) => (m.kind === "band" ? 0.85 : isArea(m) ? 1 : 1)),
-        gradient: { shade: "light", type: "vertical", shadeIntensity: 0.15, opacityFrom: 0.55, opacityTo: 0.05, stops: [0, 100] },
-      },
+      // BSFAI-Stil: flache, halbtransparente Flaechen wie im BSFAI-Dashboard - ein
+      // Verlauf wirkt auf dem dunklen Grund trueb.
+      fill: this._config.bsfai_style
+        ? {
+          type: "solid",
+          opacity: meta.map((m) => (m.kind === "band" ? 0.85 : m.kind === "class" ? 0.36 : 1)),
+        }
+        : {
+          type: meta.map((m) => (m.kind === "class" ? "gradient" : "solid")),
+          opacity: meta.map((m) => (m.kind === "band" ? 0.85 : isArea(m) ? 1 : 1)),
+          gradient: { shade: "light", type: "vertical", shadeIntensity: 0.15, opacityFrom: 0.55, opacityTo: 0.05, stops: [0, 100] },
+        },
       plotOptions: { bar: { columnWidth: "6%" } },
       dataLabels: { enabled: false },
       markers: { size: 0, hover: { size: 3 }, showNullDataPoints: false },
       legend: { show: false },
-      grid: { borderColor: "rgba(144,164,174,.35)", xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } } },
+      grid: { borderColor: this._config.bsfai_style ? "#34383d" : "rgba(144,164,174,.35)", xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } } },
       xaxis: { type: "datetime", labels: { datetimeUTC: false }, tooltip: { enabled: false } },
       tooltip: { shared: true, intersect: false, custom: ({ dataPointIndex }) => this._tooltip(dataPointIndex) },
       ...this._dynamicOptions(V, meta),
@@ -791,16 +824,18 @@ class SmartflowPreisampelCardEditor extends HTMLElement {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (schema) => labels[schema.name] || schema.name;
       this._form.addEventListener("value-changed", (ev) => {
-        this._config = this._clean(ev.detail.value);
+        this._config = this._clean(ev.detail.value, this._config);
         this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
       });
       this.appendChild(this._form);
     }
-    // Der Farbwaehler zeigt immer die wirksame Farbe, also Standard oder eigene.
+    // Der Farbwaehler zeigt immer die wirksame Farbe, also Standard (des
+    // gewaehlten Stils) oder eigene.
+    const base = palette(this._config.bsfai_style);
     const colors = {};
     for (const key of Object.keys(DEFAULT_COLORS)) {
       const own = (this._config.colors || {})[key];
-      colors[key] = Array.isArray(own) ? own : fromHex(toHex(own) || DEFAULT_COLORS[key]);
+      colors[key] = Array.isArray(own) ? own : fromHex(toHex(own) || base[key]);
     }
     const color = (name) => ({ name, selector: { color_rgb: {} } });
     this._form.hass = this._hass;
@@ -809,6 +844,7 @@ class SmartflowPreisampelCardEditor extends HTMLElement {
       { name: "entity", required: true, selector: { entity: { filter: { integration: "smartflow_preisampel", domain: "sensor" } } } },
       { name: "title", selector: { text: {} } },
       { name: "height", selector: { number: { min: 250, max: 900, step: 10, mode: "box", unit_of_measurement: "px" } } },
+      { name: "bsfai_style", selector: { boolean: {} } },
       { name: "show_history", selector: { boolean: {} } },
       { name: "show_simulator", selector: { boolean: {} } },
       { name: "simulation_on", selector: { boolean: {} } },
@@ -820,13 +856,17 @@ class SmartflowPreisampelCardEditor extends HTMLElement {
   }
 
   /* Nur Farben speichern, die vom Standard abweichen - sonst stuende nach jeder
-   * Aenderung die komplette Farbtabelle in der Kartenkonfiguration. */
-  _clean(config) {
+   * Aenderung die komplette Farbtabelle in der Kartenkonfiguration.
+   * Beim Umschalten des Stils liefert das Formular noch die Standardfarben des
+   * ALTEN Stils mit; die sind keine eigenen Farben und fallen ebenfalls weg. */
+  _clean(config, previous) {
     const out = { ...config };
     const own = {};
+    const now = palette(config.bsfai_style);
+    const before = palette(previous?.bsfai_style);
     for (const [key, value] of Object.entries(config.colors || {})) {
       const hex = toHex(value);
-      if (hex && hex.toLowerCase() !== DEFAULT_COLORS[key]) own[key] = hex;
+      if (hex && hex.toLowerCase() !== now[key] && hex.toLowerCase() !== before[key]) own[key] = hex;
     }
     if (Object.keys(own).length) out.colors = own; else delete out.colors;
     return out;

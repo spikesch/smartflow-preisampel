@@ -71,10 +71,11 @@ entity: sensor.preisampel_battery_smartflow_ai_preisstufe
 | `entity` | – | Preisstufen-Sensor der Preisampel (Pflicht) |
 | `title` | „Preisampel“ | Überschrift der Karte |
 | `height` | `420` | Höhe des Diagramms in Pixel (250–900) |
+| `bsfai_style` | `false` | **BSFAI-Stil**: dunkle Karte mit den Farben aus dem Dashboard von Battery SmartFlow AI, unabhängig vom HA-Design |
 | `show_history` | `true` | Verlaufsbalken anzeigen (was BSFAI getan hat) |
 | `show_simulator` | `true` | Simulator anzeigen |
 | `simulation_on` | `true` | Simulator beim Öffnen eingeschaltet |
-| `colors` | – | Eigene Farben als Hex-Werte, im Karten-Editor unter „Farben“ |
+| `colors` | – | Eigene Farben als Hex-Werte, im Karten-Editor unter „Farben“ – gelten in beiden Stilen |
 
 Farb-Schlüssel: `b` `l` `m` `h` `p` `x` (Preisstufen), `valley` `effective` `peak` `very_cheap` `very_expensive`
 (Linien), `act_c` `act_d` `act_i` (Verlauf: lädt, entlädt, bereit).
