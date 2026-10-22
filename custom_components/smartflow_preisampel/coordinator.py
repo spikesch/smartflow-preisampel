@@ -83,6 +83,7 @@ class PreisampelCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "avg_charge_price": s.avg_charge_price,
             "feed_in": s.feed_in,
             "efficiency": reading.efficiency,
+            "battery": reading.battery,
         })
         return {
             "ladder": result,

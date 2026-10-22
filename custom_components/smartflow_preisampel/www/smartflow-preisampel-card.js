@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.8";
+const VERSION = "0.1.9-test";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -42,6 +42,11 @@ const TEXT = {
     mismatch: "Achtung: Diese BSFAI-Version rechnet die Schwellen anders als die Ampel. Die Farben können abweichen.",
     no_prices: "BSFAI hat gerade keine Preisvorschau.",
     margin_now: "Ersparnis",
+    estimate: (end) => `Geschätzte Ersparnis bis ${end}`,
+    estimate_sim: "mit den Schieberwerten",
+    estimate_how: "Wie wird geschätzt?",
+    estimate_hint: "Schätzung nur aus den Preisen: Der Akku entlädt der Reihe nach über der Entladeschwelle (Verbrauch = Grundlast aus BSFAI) und lädt im Tal nach, wenn es sich lohnt. PV und dein echter Verbrauch fehlen – aussagekräftig ist vor allem der Unterschied zwischen zwei Einstellungen.",
+    estimate_detail: (dis, ch, empty) => `entladen ${dis} kWh · nachgeladen ${ch} kWh${empty ? ` · Akku leer ${empty}` : ""}`,
     cost: "Akku-Strom kostet",
     cost_eff: (avg, eff) => `Ø Ladepreis ${avg} ÷ Wirkungsgrad ${eff}`,
     cost_no_eff: (avg) => `Ø Ladepreis ${avg}, ohne Ladeverluste (noch zu wenig Messwerte)`,
@@ -76,6 +81,11 @@ const TEXT = {
     mismatch: "Warning: this BSFAI version calculates its thresholds differently. Colours may be off.",
     no_prices: "BSFAI has no price forecast right now.",
     margin_now: "Saving",
+    estimate: (end) => `Estimated saving until ${end}`,
+    estimate_sim: "with the slider values",
+    estimate_how: "How is this estimated?",
+    estimate_hint: "Estimate from prices only: the battery discharges in order above the discharge threshold (consumption = BSFAI base load) and recharges at valley prices when worthwhile. PV and your real consumption are missing – the difference between two settings is what matters.",
+    estimate_detail: (dis, ch, empty) => `discharged ${dis} kWh · recharged ${ch} kWh${empty ? ` · battery empty ${empty}` : ""}`,
     cost: "Battery energy costs",
     cost_eff: (avg, eff) => `avg. charge price ${avg} ÷ efficiency ${eff}`,
     cost_no_eff: (avg) => `avg. charge price ${avg}, without losses (not enough data yet)`,
@@ -320,6 +330,10 @@ class SmartflowPreisampelCard extends HTMLElement {
         button.primary { background: var(--primary-color); color: var(--text-primary-color, #fff); border-color: var(--primary-color); }
         button:disabled { opacity: .4; cursor: default; }
         .rows.disabled { opacity: .45; pointer-events: none; }
+        .estimate { margin: 4px 0 8px; }
+        .estimate .big { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .estimate .small { color: var(--secondary-text-color); font-size: .85em; }
+        .estimate summary { cursor: pointer; }
       </style>
       <ha-card class="${this._config.bsfai_style ? "bsfai" : ""}">
         <div class="head"><div class="title"></div><div class="now"></div></div>
@@ -329,6 +343,7 @@ class SmartflowPreisampelCard extends HTMLElement {
         <div class="sim" hidden>
           <div class="sim-head"><ha-switch class="sim-switch"></ha-switch><span>${t.simulation}</span></div>
           <div class="sim-hint">${t.sim_hint}</div>
+          <div class="estimate"></div>
           <div class="rows disabled"></div>
           <div class="buttons">
             <button class="reset" disabled>${t.reset}</button>
@@ -445,6 +460,8 @@ class SmartflowPreisampelCard extends HTMLElement {
       nowText.append(...parts);
     }
 
+    this._renderEstimate(V);
+
     const { series, meta } = this._series(V);
     this._meta = meta;
     this._legend(V, meta);
@@ -459,6 +476,97 @@ class SmartflowPreisampelCard extends HTMLElement {
   _fmtSigned(value, unit) {
     const text = this._fmt(Math.abs(value), unit);
     return value >= 0 ? `+${text}` : `−${text}`;
+  }
+
+  /* Grobe Ersparnis-Schaetzung nur aus Preisen (Testfunktion):
+   * ab jetzt der Reihe nach entladen, solange der Preis ueber der
+   * Entladeschwelle liegt (Verbrauch = BSFAI-Grundlast, begrenzt durch die
+   * Entladeleistung), im Tal nachladen, wenn eine spaetere Spitze den Preis um
+   * die Gewinnmarge uebersteigt (wie BSFAIs Talpreis-Nachladen). Ersparnis je
+   * kWh = Preis - Kosten der kWh aus dem Akku (Ladeverluste eingerechnet). */
+  _estimate(p, valley, effective, marginPct, V, B) {
+    const eff = V.eff || 1;
+    const usable = (B.soc_max - B.soc_min) / 100 * B.capacity_kwh;
+    let energy = Math.max(0, Math.min(usable, (B.soc - B.soc_min) / 100 * B.capacity_kwh));
+    let cost = V.costOut;
+    const outKwh = Math.min(B.base_load_w, B.max_discharge_w) / 1000 * 0.25;
+    const inKwh = B.max_charge_w / 1000 * 0.25;
+    let save = 0, dis = 0, ch = 0, emptyAt = null;
+    const start = Math.max(0, V.nowIndex);
+    for (let j = start; j < p.length; j++) {
+      if (p[j] >= effective[j] && energy > 1e-9) {
+        const d = Math.min(energy, outKwh);
+        energy -= d; dis += d; save += d * (p[j] - cost);
+        if (energy <= 1e-9 && emptyAt === null) emptyAt = j;
+      } else if (p[j] <= valley[j] && energy < usable - 1e-9) {
+        let later = -Infinity;
+        for (let k = j + 1; k < p.length; k++) later = Math.max(later, p[k]);
+        if (later >= p[j] * (1 + marginPct / 100)) {
+          const grid = Math.min((usable - energy) / eff, inKwh);
+          const stored = grid * eff;
+          cost = (cost * energy + p[j] * grid) / (energy + stored);
+          energy += stored; ch += grid;
+          if (emptyAt !== null && energy > 1e-9) emptyAt = null;
+        }
+      }
+    }
+    return { save, dis, ch, emptyAt };
+  }
+
+  _money(value, currency) {
+    const de = lang(this._hass) === "de";
+    const sign = value < 0 ? "−" : "";
+    const num = Math.abs(value).toFixed(2).replace(".", de ? "," : ".");
+    return currency === "EUR" ? `${sign}${num} €` : `${sign}${num} ${currency}`;
+  }
+
+  _slotLabel(V, index) {
+    const t = this._t();
+    const z = (n) => String(n).padStart(2, "0");
+    const d = new Date(V.t0 + index * V.step);
+    return `${t.days[d.getDay()]} ${z(d.getHours())}:${z(d.getMinutes())}`;
+  }
+
+  _renderEstimate(V) {
+    const box = this.shadowRoot.querySelector(".estimate");
+    if (!box) return;
+    const L = this._state()?.attributes?.ladder;
+    const B = L?.battery;
+    const ok = B && V.costOut !== null && V.nowIndex >= 0
+      && ["capacity_kwh", "soc", "soc_min", "soc_max", "max_charge_w", "max_discharge_w", "base_load_w"]
+        .every((k) => typeof B[k] === "number");
+    if (!ok) { box.innerHTML = ""; return; }
+    const t = this._t();
+    const realMargin = L.margin_pct;
+    const real = this._estimate(L.p, L.valley, L.effective, realMargin, V, B);
+    // Ende der Preisvorschau: Start des letzten Slots + 15 min, 00:00 als 24:00 des Vortags
+    const endLabel = (() => {
+      const z = (n) => String(n).padStart(2, "0");
+      const d = new Date(V.t0 + V.n * V.step);
+      if (d.getHours() === 0 && d.getMinutes() === 0) {
+        const prev = new Date(d.getTime() - 1);
+        return `${t.days[prev.getDay()]} 24:00`;
+      }
+      return `${t.days[d.getDay()]} ${z(d.getHours())}:${z(d.getMinutes())}`;
+    })();
+    const kwh = (x) => x.toFixed(1).replace(".", lang(this._hass) === "de" ? "," : ".");
+    const detail = (r) => t.estimate_detail(kwh(r.dis), kwh(r.ch), r.emptyAt !== null ? this._slotLabel(V, r.emptyAt + 1) : "");
+    let html = `<div><span>${t.estimate(endLabel)}: </span><span class="big">${this._money(real.save, L.currency)}</span>`;
+    let small = detail(real);
+    if (V.sim) {
+      const sim = this._estimate(V.p, V.valley, V.effective, this._sim.margin, V, B);
+      const diff = sim.save - real.save;
+      const color = diff >= 0 ? this._c("l") : this._c("p");
+      html += ` → <span>${t.estimate_sim}: </span><span class="big">${this._money(sim.save, L.currency)}</span>`
+        + ` <span class="big" style="color:${color}">(${diff >= 0 ? "+" : ""}${this._money(diff, L.currency)})</span>`;
+      small = detail(sim);
+    }
+    html += `</div><div class="small">${small}</div>`
+      + `<details class="small"><summary>${t.estimate_how}</summary>${t.estimate_hint}</details>`;
+    // Aufgeklappte Erklaerung bleibt offen, auch wenn HA neue Werte schickt
+    const open = box.querySelector("details")?.open;
+    box.innerHTML = html;
+    if (open) box.querySelector("details").open = true;
   }
 
   _marginColor(value) {
