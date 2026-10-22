@@ -31,6 +31,7 @@ Two styles, switchable with a toggle in the card editor:
   very-cheap and very-expensive thresholds
 - **History**: a bar below the chart shows what BSFAI actually did (charging · discharging · idle), the tooltip adds the state of charge
 - **Simulator** with five sliders: valley discount, peak markup, profit margin, very-cheap and very-expensive threshold.
+  Above them the **average saving per kWh** above the discharge threshold – with the real and the slider values.
   The colours follow the sliders instantly while BSFAI keeps running on its real settings.
   Only **“Apply to BSFAI”** writes the changed values – after asking you – to BSFAI's settings.
 - **Saving** in the header and the tooltip, the “profit margin” slider also shows its amount in ct (see [What does the saving mean?](#what-does-the-saving-mean))
@@ -115,8 +116,7 @@ The card header and the tooltip show the **saving**, for example “Saving +17.6
 
 > **Saving = grid price − what one kWh from the battery has cost**
 
-A battery for self-consumption does not make a profit – it makes your electricity cheaper. The saving shows how much
-cheaper one kWh from the battery is than the same kWh from the grid.
+It shows how much cheaper one kWh from the battery is than the same kWh from the grid.
 
 - **Positive** (green): energy from the battery is cheaper than energy from the grid – every kWh saves this amount.
 - **Negative** (red): grid energy is currently cheaper than the energy in the battery – discharging would cost more.
@@ -138,10 +138,22 @@ Please note: the saving is an **average view**. The charge price is averaged ove
 the energy currently in the battery. The efficiency is an approximation – energy the battery exports to the grid
 instead of the house is not counted as discharge by BSFAI.
 
-### The “profit margin” setting – really a minimum gap
+### Average saving per kWh in the simulator
+
+The simulator shows how much one kWh from the battery saves on average when BSFAI discharges above the discharge
+threshold – from now until the end of the price forecast (as far as the chart goes), for example:
+
+> Avg. saving per kWh above the discharge threshold until Fri 24:00: **18.6 ct/kWh** (10.0 h) → with the slider values: **23.9 ct/kWh** (2.3 h)
+
+- The saving is averaged over every quarter hour in which the price reaches the discharge threshold.
+- The brackets show how many hours that is. A higher threshold saves more per kWh but covers fewer hours – this
+  helps to judge whether the battery is enough for them or energy is left over.
+- As soon as a slider is moved, the value with the slider settings appears next to it.
+
+### The “profit margin” setting
 
 Next to the “profit margin” slider the price traffic light shows the amount in ct as well, following the slider as
-you move it (e.g. “20 % · 3.8 ct/kWh”). Despite its name it is not about profit but a **minimum gap**:
+you move it (e.g. “20 % · 3.8 ct/kWh”). BSFAI uses the profit margin in two places:
 
 - **Discharging:** BSFAI only considers price-based discharging worthwhile from **average charge price + profit
   margin**. The percentage refers to the average charge price, **not** the current electricity price: 20 % of
@@ -149,9 +161,9 @@ you move it (e.g. “20 % · 3.8 ct/kWh”). Despite its name it is not about pr
   move the slider or – slowly – when new charging shifts the average charge price.
 - **Grid charging at valley prices:** BSFAI only recharges if a later price peak reaches at least **current price +
   profit margin**. Here the percentage refers to the price of that quarter hour.
-- BSFAI does this **without** charging losses – the minimum gap is meant to cover them. To reach the real cost you need
-  at least **1 ÷ efficiency − 1**, i.e. about **28 %** at 78 % efficiency.
-- The minimum gap makes up only 30 % of the discharge threshold, the other 70 % come from the market (82 % of the peak
+- BSFAI does not add charging losses separately here. If you want the profit margin to cover them as well, you need at
+  least **1 ÷ efficiency − 1**, i.e. about **28 %** at 78 % efficiency.
+- The profit margin makes up 30 % of the discharge threshold, the other 70 % come from the market (82 % of the peak
   threshold). With a cheaply charged battery the setting therefore moves the discharge threshold only a little; it
   matters on days when electricity prices are close to the battery cost.
 

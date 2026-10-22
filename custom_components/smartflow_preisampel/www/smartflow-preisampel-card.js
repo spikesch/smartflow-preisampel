@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.9-test";
+const VERSION = "0.1.9";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
