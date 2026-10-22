@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.5";
+const VERSION = "0.1.6";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -41,6 +41,11 @@ const TEXT = {
     unavailable: "Keine Daten: Battery SmartFlow AI läuft nicht oder ist nicht kompatibel (siehe HA-Protokoll).",
     mismatch: "Achtung: Diese BSFAI-Version rechnet die Schwellen anders als die Ampel. Die Farben können abweichen.",
     no_prices: "BSFAI hat gerade keine Preisvorschau.",
+    margin_now: "Marge",
+    cost: "Akku-Strom kostet",
+    cost_eff: (avg, eff) => `Ø Ladepreis ${avg} ÷ Wirkungsgrad ${eff}`,
+    cost_no_eff: (avg) => `Ø Ladepreis ${avg}, ohne Ladeverluste (noch zu wenig Messwerte)`,
+    worth: (pct) => `BSFAI-Untergrenze (+${pct} %)`,
     editor: { entity: "Preisampel-Sensor", title: "Titel", height: "Höhe", bsfai_style: "BSFAI-Stil (dunkel wie das Dashboard von Battery SmartFlow AI)", show_history: "Verlauf anzeigen (was BSFAI getan hat)", show_simulator: "Simulator anzeigen", simulation_on: "Simulator beim Öffnen eingeschaltet", colors: "Farben" },
     days: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
   },
@@ -71,6 +76,11 @@ const TEXT = {
     unavailable: "No data: Battery SmartFlow AI is not running or not compatible (see the HA log).",
     mismatch: "Warning: this BSFAI version calculates its thresholds differently. Colours may be off.",
     no_prices: "BSFAI has no price forecast right now.",
+    margin_now: "Margin",
+    cost: "Battery energy costs",
+    cost_eff: (avg, eff) => `avg. charge price ${avg} ÷ efficiency ${eff}`,
+    cost_no_eff: (avg) => `avg. charge price ${avg}, without losses (not enough data yet)`,
+    worth: (pct) => `BSFAI floor (+${pct} %)`,
     editor: { entity: "Price traffic light sensor", title: "Title", height: "Height", bsfai_style: "BSFAI style (dark, like the Battery SmartFlow AI dashboard)", show_history: "Show history (what BSFAI did)", show_simulator: "Show simulator", simulation_on: "Simulator switched on when opened", colors: "Colours" },
     days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   },
@@ -285,7 +295,8 @@ class SmartflowPreisampelCard extends HTMLElement {
         .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
         .title { font-size: 1.2em; font-weight: 500; }
         .now { color: var(--secondary-text-color); font-size: .95em; }
-        .now .level { font-weight: 600; }
+        .now .level { font-weight: 600; white-space: nowrap; }
+        .now .keep { white-space: nowrap; }
         .warn { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgba(234,88,12,.12); color: var(--primary-text-color); border-left: 4px solid #ea580c; }
         .info { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgba(29,78,216,.10); border-left: 4px solid #1d4ed8; }
         .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0 2px; font-size: .9em; }
@@ -385,7 +396,13 @@ class SmartflowPreisampelCard extends HTMLElement {
     const t0 = Date.parse(L.start);
     const step = (L.step_min || 15) * 60000;
     const nowIndex = Math.min(L.n - 1, Math.max(-1, Math.floor((Date.now() - t0) / step)));
-    return { ...v, n: L.n, t0, step, unit, nowIndex, currency: L.currency };
+    // Was eine kWh AUS dem Akku gekostet hat: Ladepreis geteilt durch den
+    // gemessenen Wirkungsgrad. Ohne Wirkungsgrad bleibt es beim Ladepreis.
+    const avg = typeof L.avg_charge_price === "number" ? L.avg_charge_price : null;
+    const eff = typeof L.efficiency === "number" && L.efficiency > 0 ? L.efficiency : null;
+    const costOut = avg === null ? null : avg / (eff || 1);
+    const marginPct = this._sim && this._sim.on ? this._sim.margin : L.margin_pct;
+    return { ...v, n: L.n, t0, step, unit, nowIndex, currency: L.currency, avg, eff, costOut, marginPct };
   }
 
   _update() {
@@ -415,7 +432,20 @@ class SmartflowPreisampelCard extends HTMLElement {
       level.className = "level";
       level.style.color = this._c(nowCls);
       level.textContent = `${t.classes[nowCls]} · ${this._fmt(V.p[V.nowIndex], V.unit)}`;
-      nowText.append(`${t.now}: `, level, V.sim ? ` · ${t.simulation}` : "");
+      const parts = [`${t.now}: `, level];
+      if (V.costOut !== null) {
+        const m = V.p[V.nowIndex] - V.costOut;
+        const value = document.createElement("span");
+        value.className = "level";
+        value.style.color = this._marginColor(m);
+        value.textContent = this._fmtSigned(m, V.unit);
+        const margin = document.createElement("span");
+        margin.className = "keep";
+        margin.append(`${t.margin_now} `, value);
+        parts.push(" · ", margin);
+      }
+      if (V.sim) parts.push(` · ${t.simulation}`);
+      nowText.append(...parts);
     }
 
     const { series, meta } = this._series(V);
@@ -427,6 +457,15 @@ class SmartflowPreisampelCard extends HTMLElement {
       this._chart.updateOptions(this._dynamicOptions(V, meta), false, false, false);
       this._chart.updateSeries(series, false);
     }
+  }
+
+  _fmtSigned(value, unit) {
+    const text = this._fmt(Math.abs(value), unit);
+    return value >= 0 ? `+${text}` : `−${text}`;
+  }
+
+  _marginColor(value) {
+    return value >= 0 ? this._c("l") : this._c("p");
   }
 
   _fmt(value, unit) {
@@ -624,12 +663,21 @@ class SmartflowPreisampelCard extends HTMLElement {
     const charge = k === "b" || k === "l";
     const discharge = k === "h" || k === "p" || k === "x";
     const row = (label, value, color, extra) =>
-      `<div style="display:flex;gap:12px;justify-content:space-between;${extra || ""}${color ? `color:${color};font-weight:600;` : "opacity:.75;"}"><span>${label}</span><span style="font-variant-numeric:tabular-nums;">${value}</span></div>`;
+      `<div style="display:flex;gap:12px;justify-content:space-between;${extra || ""}${color ? `color:${color};font-weight:600;` : "opacity:.75;"}"><span>${label}</span><span style="font-variant-numeric:tabular-nums;white-space:nowrap;">${value}</span></div>`;
     let html = `<div style="padding:8px 11px;line-height:1.6;min-width:210px;max-width:320px;white-space:normal;color:var(--primary-text-color);background:var(--card-background-color);">`
       + `<div style="opacity:.65;font-size:.9em;">${t.days[d.getDay()]} ${z(d.getDate())}.${z(d.getMonth() + 1)}. ${z(d.getHours())}:${z(d.getMinutes())}${V.sim ? ` · ${t.simulation}` : ""}</div>`
       + `<div style="display:flex;gap:12px;justify-content:space-between;font-weight:600;"><span>${t.price} <span style="color:${this._c(k)};">${t.classes[k]}</span></span><span style="font-variant-numeric:tabular-nums;">${this._fmt(V.p[i], V.unit)}</span></div>`
       + row(t.valley, this._fmt(V.valley[i], V.unit), charge ? this._c("act_c") : null)
       + row(t.effective, this._fmt(V.effective[i], V.unit), discharge ? this._c("act_d") : null);
+    if (V.costOut !== null) {
+      const sep = "border-top:1px solid rgba(127,127,127,.3);margin-top:5px;padding-top:5px;";
+      const m = V.p[i] - V.costOut;
+      const pct = (x) => `${Math.round(x * 100)} %`;
+      html += row(t.cost, this._fmt(V.costOut, V.unit), null, sep)
+        + `<div style="opacity:.65;font-size:.85em;">${V.eff ? t.cost_eff(this._fmt(V.avg, V.unit), pct(V.eff)) : t.cost_no_eff(this._fmt(V.avg, V.unit))}</div>`
+        + `<div style="display:flex;gap:12px;justify-content:space-between;font-weight:600;"><span>${t.margin_now}</span><span style="font-variant-numeric:tabular-nums;color:${this._marginColor(m)};">${this._fmtSigned(m, V.unit)}</span></div>`
+        + row(t.worth(Math.round(V.marginPct)), this._fmt(V.avg * (1 + V.marginPct / 100), V.unit), null);
+    }
     const act = this._config.show_history ? this._act : null;
     if (act && i <= V.nowIndex) {
       const a = act.states[i];

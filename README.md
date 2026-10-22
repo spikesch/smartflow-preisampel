@@ -33,6 +33,7 @@ Zwei Stile, im Karten-Editor per Schalter umschaltbar:
 - **Simulator** mit fünf Schiebern: Talpreis-Abschlag, Peakpreis-Aufschlag, Gewinnmarge, Sehr-billig- und Sehr-teuer-Schwelle.
   Die Farben folgen sofort den Schiebern, BSFAI regelt währenddessen mit seinen echten Werten weiter.
   Erst **„In BSFAI übernehmen“** schreibt die geänderten Werte – nach einer Rückfrage – in die Regler von BSFAI.
+- **Marge** oben in der Kopfzeile und im Tooltip: was eine kWh aus dem Akku zu diesem Preis einbringt (siehe [Was bedeutet die Marge?](#was-bedeutet-die-marge))
 - **Sensor „Preisstufe“** mit der aktuellen Stufe, z. B. für eigene Automationen
 - **Zwei Stile**: Standard (folgt dem HA-Design) oder BSFAI-Stil (dunkel wie das Dashboard von Battery SmartFlow AI)
 - **Selbsttest**: Die Preisampel vergleicht ihre Schwellen laufend mit den Live-Werten von BSFAI und warnt auf der Karte,
@@ -105,6 +106,34 @@ Die Formeln sind denen von BSFAI nachgebaut. Für jeden Abschnitt rechnet die Pr
 - **Peak-Schwelle** = Basis + das Größere aus Basis × Peakpreis-Aufschlag und 10 % der Preisspanne
 - **Entladeschwelle** aus Peak-Schwelle, durchschnittlichem Akku-Ladepreis plus Gewinnmarge und den
   weiteren Regeln von BSFAI
+
+## Was bedeutet die Marge?
+
+Die **Marge** zeigt, was eine kWh aus dem Akku zu einem bestimmten Preis einbringt:
+
+> **Marge = Strompreis − was die kWh aus dem Akku gekostet hat**
+
+- **Positiv** (grün): Strom aus dem Akku ist billiger als Strom aus dem Netz – jede kWh spart diesen Betrag.
+- **Negativ** (rot): Der Netzstrom ist gerade billiger als der Strom im Akku – Entladen wäre ein Verlustgeschäft.
+
+**Was die kWh aus dem Akku gekostet hat** („Akku-Strom kostet“ im Tooltip):
+
+- Grundlage ist der **Ø Akku-Ladepreis** aus dem Kostenbuch von BSFAI: alle Netzladungen zum jeweiligen Preis
+  plus PV-Ladungen zum entgangenen Einspeisepreis, gemittelt über alle geladenen kWh seit Beginn.
+- **Ladeverluste kommen dazu.** Von jeder kWh, die in den Akku geht, kommt weniger wieder heraus. Die Preisampel
+  teilt den Ladepreis deshalb durch den **gemessenen Wirkungsgrad**: kWh aus dem Akku ÷ kWh in den Akku, ebenfalls
+  aus dem Kostenbuch von BSFAI. Beispiel: 18,9 ct Ladepreis ÷ 78 % Wirkungsgrad = **24,2 ct je kWh aus dem Akku**.
+- Solange BSFAI noch weniger als 20 kWh geladen hat, ist dieses Verhältnis zu ungenau. Dann rechnet die Preisampel
+  ohne Ladeverluste und sagt das im Tooltip dazu.
+
+**BSFAI-Untergrenze** im Tooltip: Ø Ladepreis × (1 + Gewinnmarge-Regler). Das ist der Wert, mit dem BSFAI selbst
+rechnet – **ohne** Ladeverluste, die soll der Regler mit abdecken. Er geht zu 30 % in die Entladeschwelle ein,
+die übrigen 70 % kommen vom Markt (82 % der Peak-Schwelle). Bei günstig geladenem Akku verschiebt der Regler die
+Entladeschwelle deshalb nur wenig.
+
+Bitte beachten: Die Marge ist eine **Durchschnittsbetrachtung**. Der Ladepreis ist ein Mittel über die ganze
+Laufzeit, nicht der Preis der Energie, die gerade im Akku steckt. Der Wirkungsgrad ist eine Näherung – was der Akku
+ins Netz statt ins Haus abgibt, zählt BSFAI nicht als Entladung.
 
 ## Bitte beachten
 

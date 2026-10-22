@@ -82,6 +82,7 @@ class PreisampelCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "expensive_threshold": s.expensive_threshold,
             "avg_charge_price": s.avg_charge_price,
             "feed_in": s.feed_in,
+            "efficiency": reading.efficiency,
         })
         return {
             "ladder": result,

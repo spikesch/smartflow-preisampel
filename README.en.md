@@ -33,6 +33,7 @@ Two styles, switchable with a toggle in the card editor:
 - **Simulator** with five sliders: valley discount, peak markup, profit margin, very-cheap and very-expensive threshold.
   The colours follow the sliders instantly while BSFAI keeps running on its real settings.
   Only **“Apply to BSFAI”** writes the changed values – after asking you – to BSFAI's settings.
+- **Margin** in the card header and the tooltip: what one kWh from the battery is worth at that price (see [What does the margin mean?](#what-does-the-margin-mean))
 - **“Price level” sensor** with the current level, e.g. for your own automations
 - **Two styles**: standard (follows the HA theme) or BSFAI style (dark, like the Battery SmartFlow AI dashboard)
 - **Self-test**: the price traffic light continuously compares its thresholds with BSFAI's live values and
@@ -107,6 +108,34 @@ The formulas are re-implemented from BSFAI. For every slot the price traffic lig
 - **Peak threshold** = base + the larger of base × peak markup and 10 % of the price range
 - **Discharge threshold** from the peak threshold, the average battery charge price plus profit margin and
   BSFAI's further rules
+
+## What does the margin mean?
+
+The **margin** shows what one kWh from the battery is worth at a given price:
+
+> **Margin = electricity price − what one kWh from the battery has cost**
+
+- **Positive** (green): energy from the battery is cheaper than energy from the grid – every kWh saves this amount.
+- **Negative** (red): grid energy is currently cheaper than the energy in the battery – discharging would lose money.
+
+**What one kWh from the battery has cost** (“Battery energy costs” in the tooltip):
+
+- It is based on the **average battery charge price** from BSFAI's cost ledger: all grid charging at its price plus
+  PV charging at the feed-in tariff you gave up, averaged over every kWh charged since the start.
+- **Charging losses come on top.** Less comes out of the battery than went in. The price traffic light therefore
+  divides the charge price by the **measured efficiency**: kWh out of the battery ÷ kWh into the battery, also from
+  BSFAI's cost ledger. Example: 18.9 ct charge price ÷ 78 % efficiency = **24.2 ct per kWh out of the battery**.
+- While BSFAI has charged less than 20 kWh in total, this ratio is too unreliable. The card then calculates without
+  losses and says so in the tooltip.
+
+**BSFAI floor** in the tooltip: average charge price × (1 + profit margin setting). This is the value BSFAI itself
+works with – **without** charging losses, which the margin setting is meant to cover. It makes up 30 % of the
+discharge threshold, the other 70 % come from the market (82 % of the peak threshold). With a cheaply charged battery
+the setting therefore moves the discharge threshold only a little.
+
+Please note: the margin is an **average view**. The charge price is averaged over the whole runtime, not the price
+of the energy currently in the battery. The efficiency is an approximation – energy the battery exports to the grid
+instead of the house is not counted as discharge by BSFAI.
 
 ## Please note
 

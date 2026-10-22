@@ -47,6 +47,30 @@ class BsfaiReading:
     version: str | None
     live: dict[str, float | None]
     entities: dict[str, str | None] = field(default_factory=dict)
+    efficiency: float | None = None
+
+
+# Unter dieser Lademenge haengt das Verhaeltnis Entladen/Laden noch stark vom
+# Ladestand beim Start ab - dann lieber gar keine Verlustkorrektur.
+MIN_EFFICIENCY_KWH = 20.0
+
+
+def _efficiency(economics: Any) -> float | None:
+    """Gemessener Wirkungsgrad seit Start: kWh aus dem Akku / kWh hinein.
+
+    Aus BSFAIs Kostenbuch (EconomicsEngine._total, intern). Naeherung: was der
+    Akku ins Netz statt ins Haus abgibt, zaehlt BSFAI dort nicht als Entladung.
+    """
+    totals = getattr(economics, "_total", None)
+    try:
+        charged = float(totals.grid_charge_kwh) + float(totals.pv_charge_kwh)
+        discharged = float(totals.battery_discharge_kwh)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if charged < MIN_EFFICIENCY_KWH or discharged <= 0.0:
+        return None
+    ratio = discharged / charged
+    return ratio if 0.5 <= ratio <= 1.0 else None
 
 
 def coordinator(hass: HomeAssistant, entry_id: str) -> Any:
@@ -141,6 +165,7 @@ def read(hass: HomeAssistant, entry_id: str, now: datetime) -> BsfaiReading:
         version=_version(),
         live=live,
         entities=entity_ids(hass, entry_id, coord),
+        efficiency=_efficiency(economics),
     )
 
 
