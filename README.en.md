@@ -47,7 +47,7 @@ A price below the charge threshold therefore does not necessarily mean BSFAI wil
 
 - Home Assistant 2024.10 or newer
 - [Battery SmartFlow AI](https://github.com/PalmManiac/battery-smartflow-ai), set up and running
-  (tested with 5.1.x, most recently 5.1.16)
+  (tested with 5.1.x and 5.2.x, most recently 5.2.6)
 - [apexcharts-card](https://github.com/RomRider/apexcharts-card) from HACS – the price traffic light uses the
   chart library that apexcharts-card provides
 

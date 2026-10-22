@@ -47,7 +47,7 @@ Liegt ein Preis unter der Ladeschwelle, heißt das also nicht zwingend, dass BSF
 
 - Home Assistant 2024.10 oder neuer
 - [Battery SmartFlow AI](https://github.com/PalmManiac/battery-smartflow-ai), eingerichtet und laufend
-  (getestet mit 5.1.x, zuletzt 5.1.16)
+  (getestet mit 5.1.x und 5.2.x, zuletzt 5.2.6)
 - [apexcharts-card](https://github.com/RomRider/apexcharts-card) aus HACS – die Preisampel nutzt die
   Diagramm-Bibliothek, die apexcharts-card mitbringt
 
