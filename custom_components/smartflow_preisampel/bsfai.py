@@ -48,37 +48,11 @@ class BsfaiReading:
     live: dict[str, float | None]
     entities: dict[str, str | None] = field(default_factory=dict)
     efficiency: float | None = None
-    battery: dict[str, float | None] | None = None
 
 
 # Unter dieser Lademenge haengt das Verhaeltnis Entladen/Laden noch stark vom
 # Ladestand beim Start ab - dann lieber gar keine Verlustkorrektur.
 MIN_EFFICIENCY_KWH = 20.0
-
-
-def _battery(hass: HomeAssistant, coord: Any, get_setting: Any,
-             soc_entity: str | None) -> dict[str, float | None] | None:
-    """Akkugroesse, Grenzen und Leistungen fuer die Ersparnis-Schaetzung der Karte.
-
-    Kapazitaet ueber BSFAIs eigene Rechnung (_get_battery_capacity, intern),
-    die Regler ueber dieselben Setting-Keys wie BSFAIs number-Entities.
-    """
-    try:
-        capacity = float(coord._get_battery_capacity())
-    except Exception:  # noqa: BLE001
-        return None
-    if not capacity > 0.0:
-        return None
-    state = hass.states.get(soc_entity) if soc_entity else None
-    return {
-        "capacity_kwh": capacity,
-        "soc": _float(state.state, None) if state else None,
-        "soc_min": _float(get_setting("soc_min", None), None),
-        "soc_max": _float(get_setting("soc_max", None), None),
-        "max_charge_w": _float(get_setting("max_charge", None), None),
-        "max_discharge_w": _float(get_setting("max_discharge", None), None),
-        "base_load_w": _float(get_setting("forecast_base_load", None), None),
-    }
 
 
 def _efficiency(economics: Any) -> float | None:
@@ -184,16 +158,14 @@ def read(hass: HomeAssistant, entry_id: str, now: datetime) -> BsfaiReading:
         "effective": _float(data.get("effective_discharge_threshold"), None),
     }
 
-    entities = entity_ids(hass, entry_id, coord)
     return BsfaiReading(
         points=points,
         settings=settings,
         currency=getattr(currency, "code", str(currency)),
         version=_version(),
         live=live,
-        entities=entities,
+        entities=entity_ids(hass, entry_id, coord),
         efficiency=_efficiency(economics),
-        battery=_battery(hass, coord, get_setting, entities.get("soc")),
     )
 
 
