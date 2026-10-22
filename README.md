@@ -31,7 +31,8 @@ Zwei Stile, im Karten-Editor per Schalter umschaltbar:
 - **Schwellen** als Linien: Ladeschwelle (Tal), Entladeschwelle, Peak-Schwelle sowie die festen Sehr-billig- und Sehr-teuer-Schwellen
 - **Verlauf**: ein Balken darunter zeigt, was BSFAI tatsächlich getan hat (lädt · entlädt · bereit), der Tooltip zusätzlich den Ladestand
 - **Simulator** mit fünf Schiebern: Talpreis-Abschlag, Peakpreis-Aufschlag, Gewinnmarge, Sehr-billig- und Sehr-teuer-Schwelle.
-  Darüber die **Ø Ersparnis je kWh** über der Entladeschwelle – mit den echten und mit den Schieberwerten.
+  Darüber die **Ersparnis** über der Entladeschwelle je kWh und insgesamt in € – mit den echten und den Schieberwerten –
+  und ein Knopf **„Optimieren“**, der Peakpreis-Aufschlag und Talpreis-Abschlag für die angezeigten Preise einstellt.
   Die Farben folgen sofort den Schiebern, BSFAI regelt währenddessen mit seinen echten Werten weiter.
   Erst **„In BSFAI übernehmen“** schreibt die geänderten Werte – nach einer Rückfrage – in die Regler von BSFAI.
 - **Ersparnis** in der Kopfzeile und im Tooltip, am Schieber „Gewinnmarge“ zusätzlich der Betrag in ct (siehe [Was bedeutet die Ersparnis?](#was-bedeutet-die-ersparnis))
@@ -136,17 +137,46 @@ Bitte beachten: Die Ersparnis ist eine **Durchschnittsbetrachtung**. Der Ladepre
 Laufzeit, nicht der Preis der Energie, die gerade im Akku steckt. Der Wirkungsgrad ist eine Näherung – was der Akku
 ins Netz statt ins Haus abgibt, zählt BSFAI nicht als Entladung.
 
-### Ø Ersparnis je kWh im Simulator
+### Ersparnis im Simulator – je kWh und insgesamt
 
-Im Simulator steht, wie viel eine kWh aus dem Akku im Schnitt spart, wenn BSFAI über der Entladeschwelle entlädt –
-gerechnet von jetzt bis zum Ende der Preisvorschau (so weit der Graph reicht), zum Beispiel:
+Im Simulator steht, was der Akku von jetzt bis zum Ende der Preisvorschau (so weit der Graph reicht) über der
+Entladeschwelle einbringt, zum Beispiel:
 
-> Ø Ersparnis je kWh über der Entladeschwelle bis Fr 24:00: **18,6 ct/kWh** (10,0 h) → mit den Schieberwerten: **23,9 ct/kWh** (2,3 h)
+> Bis Fr 24:00 über der Entladeschwelle: Ø **18,4 ct/kWh** (9,3 h) · ≈ **0,91 €** → mit den Schieberwerten: Ø **26,2 ct/kWh** (0,8 h) · ≈ **0,11 €**
 
-- Gemittelt wird die Ersparnis über alle Viertelstunden, in denen der Preis die Entladeschwelle erreicht.
-- In Klammern steht, wie viele Stunden das sind. Eine höhere Schwelle spart je kWh mehr, betrifft aber weniger
-  Stunden – ob der Akku dafür reicht oder übrig bleibt, lässt sich daran abschätzen.
-- Sobald ein Schieber verstellt ist, steht der Wert mit den Schieberwerten daneben.
+- **Ø je kWh:** die Ersparnis gemittelt über alle Viertelstunden, in denen der Preis die Entladeschwelle erreicht.
+  In Klammern steht, wie viele Stunden das sind.
+- **≈ € insgesamt:** die geschätzte Ersparnis für den ganzen Zeitraum – dieselbe Rechnung, die auch der Knopf
+  „Optimieren“ verwendet (siehe dort). Sie berücksichtigt, wie viel Energie der Akku hat und wann er leer ist.
+- Beides zusammen zeigt den Zielkonflikt: Eine höhere Schwelle spart je kWh mehr, betrifft aber weniger Stunden –
+  im Beispiel 26,2 ct statt 18,4 ct je kWh, insgesamt aber nur 0,11 € statt 0,91 €. Maßgeblich ist der Betrag
+  insgesamt.
+- Sobald ein Schieber verstellt ist, stehen die Werte mit den Schieberwerten daneben. Den Betrag in € zeigt die
+  Preisampel nur, wenn BSFAI Akkugröße, Ladestand und Grundlast liefert.
+
+### Knopf „Optimieren“
+
+Der Knopf **„Optimieren“** im Simulator sucht die Einstellung von **Peakpreis-Aufschlag** und
+**Talpreis-Abschlag**, mit der die geschätzte Ersparnis bis zum Ende der Preisvorschau am größten ist, und stellt
+die Schieber darauf. Darunter steht, wie sich die geschätzte Ersparnis dadurch ändert, z. B.
+„geschätzte Ersparnis 0,11 € → 0,91 €“. Gewinnmarge und die festen Schwellen bleiben unverändert.
+
+- **Nur in der Simulation.** Der Knopf verstellt ausschließlich die Schieber. BSFAI regelt weiter mit seinen echten
+  Werten – die Optimierung wirkt erst, wenn du sie mit **„In BSFAI übernehmen“** überträgst.
+- **Gilt nur für die angezeigten Preise.** Optimiert wird auf die Preise von jetzt bis zum Ende der Preisvorschau
+  (so weit der Graph reicht). BSFAI behält die Einstellung aber, bis du sie wieder änderst – mit den Preisen von
+  morgen kann ein anderer Wert besser sein. Es lohnt sich, die Optimierung bei neuen Preisen erneut anzusehen.
+- **Vereinfachte Rechnung.** Für die Schätzung entlädt der Akku ab jetzt der Reihe nach in jeder Viertelstunde über
+  der Entladeschwelle (Verbrauch = Grundlast aus BSFAI, höchstens die Entladeleistung) und lädt im Tal nach, wenn
+  eine spätere Preisspitze den Preis um die Gewinnmarge übersteigt. PV-Überschuss, der tatsächliche Verbrauch und
+  weitere Regeln von BSFAI (z. B. Lernplanung) fließen nicht ein. Das Ergebnis ist deshalb ein Richtwert.
+- **Warum nicht auf die Ø Ersparnis je kWh?** Je höher die Entladeschwelle, desto höher die Ersparnis je kWh – aber in
+  immer weniger Stunden, bis ein Teil des Akkus ungenutzt bleibt. Optimiert wird deshalb auf die **Ersparnis
+  insgesamt** in Euro. Energie, die am Ende der Preisvorschau noch im Akku ist, zählt dabei weder als Gewinn noch als
+  Verlust.
+- Bei gleich guten Ergebnissen wählt der Knopf die Einstellung, die am nächsten an den bisherigen Werten liegt.
+- Für die Rechnung braucht die Preisampel Akkugröße, Ladestand, Grenzen, Leistungen und Grundlast aus BSFAI. Fehlen
+  sie, sagt der Knopf das.
 
 ### Der Regler „Gewinnmarge“
 

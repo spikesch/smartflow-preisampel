@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.9";
+const VERSION = "1.0.0";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -42,8 +42,13 @@ const TEXT = {
     mismatch: "Achtung: Diese BSFAI-Version rechnet die Schwellen anders als die Ampel. Die Farben können abweichen.",
     no_prices: "BSFAI hat gerade keine Preisvorschau.",
     margin_now: "Ersparnis",
-    estimate: (end) => `Ø Ersparnis je kWh über der Entladeschwelle bis ${end}`,
+    estimate: (end) => `Bis ${end} über der Entladeschwelle`,
     estimate_sim: "mit den Schieberwerten",
+    optimize: "Optimieren",
+    optimize_title: "Stellt Peakpreis-Aufschlag und Talpreis-Abschlag so ein, dass die geschätzte Ersparnis bis zum Ende der Preisvorschau am größten ist. Nur in der Simulation – BSFAI ändert sich erst mit „In BSFAI übernehmen“.",
+    optimize_result: (end, before, after) => `Optimiert auf die Preise bis ${end}: geschätzte Ersparnis ${before} → ${after}. Wirkt erst nach „In BSFAI übernehmen“.`,
+    optimize_same: (end) => `Für die Preise bis ${end} sind die Werte schon optimal.`,
+    optimize_missing: "Zum Optimieren fehlen noch Akkudaten von BSFAI (Akkugröße, Ladestand, Grundlast).",
     cost: "Akku-Strom kostet",
     cost_eff: (avg, eff) => `Ø Ladepreis ${avg} ÷ Wirkungsgrad ${eff}`,
     cost_no_eff: (avg) => `Ø Ladepreis ${avg}, ohne Ladeverluste (noch zu wenig Messwerte)`,
@@ -78,8 +83,13 @@ const TEXT = {
     mismatch: "Warning: this BSFAI version calculates its thresholds differently. Colours may be off.",
     no_prices: "BSFAI has no price forecast right now.",
     margin_now: "Saving",
-    estimate: (end) => `Avg. saving per kWh above the discharge threshold until ${end}`,
+    estimate: (end) => `Until ${end} above the discharge threshold`,
     estimate_sim: "with the slider values",
+    optimize: "Optimise",
+    optimize_title: "Sets peak markup and valley discount so that the estimated saving until the end of the price forecast is highest. Simulation only – BSFAI only changes when you press “Apply to BSFAI”.",
+    optimize_result: (end, before, after) => `Optimised for the prices until ${end}: estimated saving ${before} → ${after}. Takes effect only after “Apply to BSFAI”.`,
+    optimize_same: (end) => `For the prices until ${end} the values are already optimal.`,
+    optimize_missing: "Optimising needs battery data from BSFAI (capacity, state of charge, base load).",
     cost: "Battery energy costs",
     cost_eff: (avg, eff) => `avg. charge price ${avg} ÷ efficiency ${eff}`,
     cost_no_eff: (avg) => `avg. charge price ${avg}, without losses (not enough data yet)`,
@@ -326,6 +336,7 @@ class SmartflowPreisampelCard extends HTMLElement {
         .rows.disabled { opacity: .45; pointer-events: none; }
         .estimate { margin: 4px 0 8px; }
         .estimate .big { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .estimate .note { color: var(--secondary-text-color); font-size: .9em; margin-top: 2px; }
 
       </style>
       <ha-card class="${this._config.bsfai_style ? "bsfai" : ""}">
@@ -339,6 +350,7 @@ class SmartflowPreisampelCard extends HTMLElement {
           <div class="estimate"></div>
           <div class="rows disabled"></div>
           <div class="buttons">
+            <button class="optimize" title="${t.optimize_title}">${t.optimize}</button>
             <button class="reset" disabled>${t.reset}</button>
             <button class="apply primary" disabled>${t.apply}</button>
           </div>
@@ -489,21 +501,149 @@ class SmartflowPreisampelCard extends HTMLElement {
     const L = this._state()?.attributes?.ladder;
     if (!L || V.costOut === null || V.nowIndex < 0) { box.innerHTML = ""; return; }
     const t = this._t();
-    const z = (n) => String(n).padStart(2, "0");
-    const endLabel = (() => {
-      const d = new Date(V.t0 + V.n * V.step);
-      if (d.getHours() === 0 && d.getMinutes() === 0) return `${t.days[new Date(d.getTime() - 1).getDay()]} 24:00`;
-      return `${t.days[d.getDay()]} ${z(d.getHours())}:${z(d.getMinutes())}`;
-    })();
+    const endLabel = this._endLabel(V);
     const h = (x) => `${x.toFixed(1).replace(".", lang(this._hass) === "de" ? "," : ".")} h`;
-    const part = (r) => (r.avg === null ? `— (0 h)` : `<span class="big">${this._fmt(r.avg, V.unit)}</span> (${h(r.hours)})`);
+    // Geschaetzte Ersparnis insgesamt (dieselbe Rechnung wie beim Optimieren) -
+    // nur, wenn BSFAI die Akkudaten liefert
+    const B = this._battery();
+    const laterMax = B ? this._laterMax(L.p) : null;
+    const part = (r, total) => {
+      let out = r.avg === null ? `— (0 h)` : `Ø <span class="big">${this._fmt(r.avg, V.unit)}</span> (${h(r.hours)})`;
+      if (total !== null) out += ` · ≈ <span class="big">${this._money(total, L.currency)}</span>`;
+      return out;
+    };
+    const total = (p, valley, effective, margin) => (B ? this._estimate(p, valley, effective, margin, V, B, laterMax) : null);
     const real = this._perKwh(L.p, L.effective, V);
-    let html = `${t.estimate(endLabel)}: ${part(real)}`;
+    let html = `${t.estimate(endLabel)}: ${part(real, total(L.p, L.valley, L.effective, L.margin_pct))}`;
     if (V.sim) {
       const sim = this._perKwh(V.p, V.effective, V);
-      html += ` → ${t.estimate_sim}: ${part(sim)}`;
+      html += ` → ${t.estimate_sim}: ${part(sim, total(V.p, V.valley, V.effective, this._sim.margin))}`;
     }
+    if (this._optNote) html += `<div class="note">${this._optNote}</div>`;
     box.innerHTML = html;
+  }
+
+  /* Ende der Preisvorschau, 00:00 als 24:00 des Vortags */
+  _endLabel(V) {
+    const t = this._t();
+    const z = (n) => String(n).padStart(2, "0");
+    const d = new Date(V.t0 + V.n * V.step);
+    if (d.getHours() === 0 && d.getMinutes() === 0) return `${t.days[new Date(d.getTime() - 1).getDay()]} 24:00`;
+    return `${t.days[d.getDay()]} ${z(d.getHours())}:${z(d.getMinutes())}`;
+  }
+
+  _money(value, currency) {
+    const de = lang(this._hass) === "de";
+    const sign = value < 0 ? "−" : "";
+    const num = Math.abs(value).toFixed(2).replace(".", de ? "," : ".");
+    return currency === "EUR" ? `${sign}${num} €` : `${sign}${num} ${currency}`;
+  }
+
+  /* Grobe Ersparnis in Geld bis zum Ende der Preisvorschau - nur fuer den
+   * Optimieren-Knopf. Ab jetzt der Reihe nach entladen, solange der Preis
+   * ueber der Entladeschwelle liegt (Verbrauch = BSFAI-Grundlast, begrenzt durch
+   * die Entladeleistung); im Tal nachladen, wenn eine spaetere Spitze den Preis
+   * um die Gewinnmarge uebersteigt (wie BSFAIs Talpreis-Nachladen). Ersparnis
+   * je kWh = Preis - Kosten der kWh aus dem Akku (Ladeverluste eingerechnet).
+   * Energie, die am Ende noch im Akku ist, zaehlt weder als Gewinn noch Verlust. */
+  _estimate(p, valley, effective, marginPct, V, B, laterMax) {
+    const eff = V.eff || 1;
+    const usable = (B.soc_max - B.soc_min) / 100 * B.capacity_kwh;
+    let energy = Math.max(0, Math.min(usable, (B.soc - B.soc_min) / 100 * B.capacity_kwh));
+    let cost = V.costOut;
+    const outKwh = Math.min(B.base_load_w, B.max_discharge_w) / 1000 * 0.25;
+    const inKwh = B.max_charge_w / 1000 * 0.25;
+    let save = 0;
+    for (let j = Math.max(0, V.nowIndex); j < p.length; j++) {
+      if (p[j] >= effective[j] && energy > 1e-9) {
+        const d = Math.min(energy, outKwh);
+        energy -= d; save += d * (p[j] - cost);
+      } else if (p[j] <= valley[j] && energy < usable - 1e-9 && laterMax[j] >= p[j] * (1 + marginPct / 100)) {
+        const grid = Math.min((usable - energy) / eff, inKwh);
+        const stored = grid * eff;
+        cost = (cost * energy + p[j] * grid) / (energy + stored);
+        energy += stored;
+      }
+    }
+    return save;
+  }
+
+  /* hoechster Preis nach jedem Slot - fuer die Nachlade-Regel */
+  _laterMax(p) {
+    const out = new Array(p.length).fill(-Infinity);
+    for (let j = p.length - 2; j >= 0; j--) out[j] = Math.max(p[j + 1], out[j + 1]);
+    return out;
+  }
+
+  _battery() {
+    const B = this._state()?.attributes?.ladder?.battery;
+    const keys = ["capacity_kwh", "soc", "soc_min", "soc_max", "max_charge_w", "max_discharge_w", "base_load_w"];
+    return B && keys.every((k) => typeof B[k] === "number") ? B : null;
+  }
+
+  /* Probiert alle Kombinationen aus Peakpreis-Aufschlag und Talpreis-Abschlag
+   * (Schieberbereiche von BSFAI) und nimmt die mit der groessten geschaetzten
+   * Ersparnis; bei Gleichstand die, die am naechsten an den jetzigen Werten liegt.
+   * Gewinnmarge und die festen Schwellen bleiben, wie sie sind. */
+  _optimize() {
+    const t = this._t();
+    const L = this._state()?.attributes?.ladder;
+    const V = this._view();
+    const B = this._battery();
+    if (!L || !V || !B || V.costOut === null || V.nowIndex < 0) {
+      this._optNote = t.optimize_missing;
+      this._update();
+      return;
+    }
+    const laterMax = this._laterMax(L.p);
+    const range = (key) => {
+      const el = this.shadowRoot.querySelector(`input[data-key="${key}"]`);
+      const min = parseFloat(el.min), max = parseFloat(el.max);
+      let step = parseFloat(el.step) || 1;
+      while ((max - min) / step > 200) step *= 2;
+      const out = [];
+      for (let x = min; x <= max + 1e-9; x += step) out.push(Math.round(x * 1000) / 1000);
+      return out;
+    };
+    const base = {
+      margin_pct: this._sim.margin, very_cheap: this._sim.very_cheap, very_expensive: this._sim.very_expensive,
+      expensive_threshold: L.expensive_threshold, avg_charge_price: L.avg_charge_price, feed_in: L.feed_in,
+    };
+    const score = (discount, markup) => {
+      const r = ladder(L.p, { ...base, valley_factor: 1 - discount / 100, peak_factor: 1 + markup / 100 });
+      return this._estimate(L.p, r.valley, r.effective, this._sim.margin, V, B, laterMax);
+    };
+    const cur = { discount: this._sim.discount, markup: this._sim.markup };
+    const before = score(cur.discount, cur.markup);
+    let best = { ...cur, save: before, dist: 0 };
+    for (const discount of range("discount")) {
+      for (const markup of range("markup")) {
+        const save = score(discount, markup);
+        const dist = Math.abs(discount - cur.discount) + Math.abs(markup - cur.markup);
+        if (save > best.save + 0.005 || (Math.abs(save - best.save) <= 0.005 && dist < best.dist)) {
+          best = { discount, markup, save, dist };
+        }
+      }
+    }
+    const end = this._endLabel(V);
+    if (best.discount === cur.discount && best.markup === cur.markup) {
+      this._optNote = t.optimize_same(end);
+    } else {
+      this._optNote = t.optimize_result(end, this._money(before, L.currency), this._money(best.save, L.currency));
+      for (const key of ["discount", "markup"]) {
+        this._sim[key] = best[key];
+        const el = this.shadowRoot.querySelector(`input[data-key="${key}"]`);
+        if (el) el.value = best[key];
+        this._showValue(key);
+      }
+    }
+    // Simulation einschalten, damit das Ergebnis sichtbar ist
+    this._sim.on = true;
+    const sw = this.shadowRoot.querySelector(".sim-switch");
+    if (sw) sw.checked = true;
+    this.shadowRoot.querySelector(".rows").classList.remove("disabled");
+    this._markDirty();
+    this._update();
   }
 
   _marginColor(value) {
@@ -818,6 +958,7 @@ class SmartflowPreisampelCard extends HTMLElement {
       input.max = r.key === "margin" ? Math.min(a.max, 200) : a.max;
       input.dataset.key = r.key;
       input.addEventListener("input", () => {
+        this._optNote = null;
         this._sim[r.key] = parseFloat(input.value);
         this._showValue(r.key);
         this._markDirty();
@@ -834,11 +975,13 @@ class SmartflowPreisampelCard extends HTMLElement {
       this._update();
     });
     box.querySelector(".reset").addEventListener("click", () => {
+      this._optNote = null;
       this._syncSimulatorFromReal(true);
       this._markDirty();
       this._update();
     });
     box.querySelector(".apply").addEventListener("click", () => this._apply());
+    box.querySelector(".optimize").addEventListener("click", () => this._optimize());
     this._syncSimulatorFromReal(true);
     // Standard: Simulator an. Solange niemand schiebt, stehen die Schieber auf
     // den echten Werten - das Bild ist dann identisch mit dem echten.

@@ -31,7 +31,8 @@ Two styles, switchable with a toggle in the card editor:
   very-cheap and very-expensive thresholds
 - **History**: a bar below the chart shows what BSFAI actually did (charging · discharging · idle), the tooltip adds the state of charge
 - **Simulator** with five sliders: valley discount, peak markup, profit margin, very-cheap and very-expensive threshold.
-  Above them the **average saving per kWh** above the discharge threshold – with the real and the slider values.
+  Above them the **saving** above the discharge threshold per kWh and in total in € – with the real and the slider values –
+  and an **“Optimise”** button that sets peak markup and valley discount for the prices shown.
   The colours follow the sliders instantly while BSFAI keeps running on its real settings.
   Only **“Apply to BSFAI”** writes the changed values – after asking you – to BSFAI's settings.
 - **Saving** in the header and the tooltip, the “profit margin” slider also shows its amount in ct (see [What does the saving mean?](#what-does-the-saving-mean))
@@ -138,17 +139,44 @@ Please note: the saving is an **average view**. The charge price is averaged ove
 the energy currently in the battery. The efficiency is an approximation – energy the battery exports to the grid
 instead of the house is not counted as discharge by BSFAI.
 
-### Average saving per kWh in the simulator
+### Saving in the simulator – per kWh and in total
 
-The simulator shows how much one kWh from the battery saves on average when BSFAI discharges above the discharge
-threshold – from now until the end of the price forecast (as far as the chart goes), for example:
+The simulator shows what the battery brings from now until the end of the price forecast (as far as the chart goes)
+above the discharge threshold, for example:
 
-> Avg. saving per kWh above the discharge threshold until Fri 24:00: **18.6 ct/kWh** (10.0 h) → with the slider values: **23.9 ct/kWh** (2.3 h)
+> Until Fri 24:00 above the discharge threshold: avg. **18.4 ct/kWh** (9.3 h) · ≈ **€0.91** → with the slider values: avg. **26.2 ct/kWh** (0.8 h) · ≈ **€0.11**
 
-- The saving is averaged over every quarter hour in which the price reaches the discharge threshold.
-- The brackets show how many hours that is. A higher threshold saves more per kWh but covers fewer hours – this
-  helps to judge whether the battery is enough for them or energy is left over.
-- As soon as a slider is moved, the value with the slider settings appears next to it.
+- **Average per kWh:** the saving averaged over every quarter hour in which the price reaches the discharge threshold.
+  The brackets show how many hours that is.
+- **≈ € in total:** the estimated saving for the whole period – the same calculation the “Optimise” button uses (see
+  there). It takes into account how much energy the battery has and when it runs empty.
+- Together they show the trade-off: a higher threshold saves more per kWh but covers fewer hours – in the example
+  26.2 ct instead of 18.4 ct per kWh, but only €0.11 instead of €0.91 in total. The total is what counts.
+- As soon as a slider is moved, the values with the slider settings appear next to it. The euro amount is only shown
+  when BSFAI provides battery capacity, state of charge and base load.
+
+### “Optimise” button
+
+The **“Optimise”** button in the simulator searches for the **peak markup** and **valley discount** that give the
+highest estimated saving until the end of the price forecast and sets the sliders accordingly. Below it shows how the
+estimated saving changes, e.g. “estimated saving €0.11 → €0.91”. Profit margin and the fixed thresholds stay as
+they are.
+
+- **Simulation only.** The button only moves the sliders. BSFAI keeps running on its real settings – the optimisation
+  only takes effect once you transfer it with **“Apply to BSFAI”**.
+- **Valid only for the prices shown.** It optimises for the prices from now until the end of the price forecast (as
+  far as the chart goes). BSFAI keeps the setting until you change it again – with tomorrow's prices a different value
+  may be better. It is worth looking at the optimisation again when new prices arrive.
+- **Simplified calculation.** For the estimate the battery discharges from now on in every quarter hour above the
+  discharge threshold (consumption = BSFAI base load, at most the discharge power) and recharges at valley prices when
+  a later price peak exceeds the price by the profit margin. PV surplus, your actual consumption and further BSFAI
+  rules (e.g. learned planning) are not included. The result is therefore a guide value.
+- **Why not the average saving per kWh?** The higher the discharge threshold, the higher the saving per kWh – but in
+  fewer and fewer hours, until part of the battery remains unused. The button therefore optimises the **total saving**
+  in euros. Energy still in the battery at the end of the price forecast counts as neither gain nor loss.
+- If several settings are equally good, the button picks the one closest to the current values.
+- The calculation needs battery capacity, state of charge, limits, power values and base load from BSFAI. If they are
+  missing, the button says so.
 
 ### The “profit margin” setting
 
