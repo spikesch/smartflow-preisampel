@@ -33,7 +33,7 @@ Zwei Stile, im Karten-Editor per Schalter umschaltbar:
 - **Simulator** mit fünf Schiebern: Talpreis-Abschlag, Peakpreis-Aufschlag, Gewinnmarge, Sehr-billig- und Sehr-teuer-Schwelle.
   Die Farben folgen sofort den Schiebern, BSFAI regelt währenddessen mit seinen echten Werten weiter.
   Erst **„In BSFAI übernehmen“** schreibt die geänderten Werte – nach einer Rückfrage – in die Regler von BSFAI.
-- **Marge** oben in der Kopfzeile und im Tooltip: was eine kWh aus dem Akku zu diesem Preis einbringt (siehe [Was bedeutet die Marge?](#was-bedeutet-die-marge))
+- **Ersparnis** in der Kopfzeile und im Tooltip, am Schieber „Gewinnmarge“ zusätzlich der Betrag in ct (siehe [Was bedeutet die Ersparnis?](#was-bedeutet-die-ersparnis))
 - **Sensor „Preisstufe“** mit der aktuellen Stufe, z. B. für eigene Automationen
 - **Zwei Stile**: Standard (folgt dem HA-Design) oder BSFAI-Stil (dunkel wie das Dashboard von Battery SmartFlow AI)
 - **Selbsttest**: Die Preisampel vergleicht ihre Schwellen laufend mit den Live-Werten von BSFAI und warnt auf der Karte,
@@ -107,14 +107,20 @@ Die Formeln sind denen von BSFAI nachgebaut. Für jeden Abschnitt rechnet die Pr
 - **Entladeschwelle** aus Peak-Schwelle, durchschnittlichem Akku-Ladepreis plus Gewinnmarge und den
   weiteren Regeln von BSFAI
 
-## Was bedeutet die Marge?
+## Was bedeutet die Ersparnis?
 
-Die **Marge** zeigt, was eine kWh aus dem Akku zu einem bestimmten Preis einbringt:
+Oben in der Kopfzeile und im Tooltip steht die **Ersparnis**, zum Beispiel „Ersparnis +17,6 ct/kWh“:
 
-> **Marge = Strompreis − was die kWh aus dem Akku gekostet hat**
+> **Ersparnis = Netzpreis − was die kWh aus dem Akku gekostet hat**
+
+Ein Akku für den Eigenverbrauch bringt keinen Gewinn – er macht deinen Strom billiger. Die Ersparnis zeigt, um wie
+viel eine kWh aus dem Akku günstiger ist als dieselbe kWh aus dem Netz.
 
 - **Positiv** (grün): Strom aus dem Akku ist billiger als Strom aus dem Netz – jede kWh spart diesen Betrag.
-- **Negativ** (rot): Der Netzstrom ist gerade billiger als der Strom im Akku – Entladen wäre ein Verlustgeschäft.
+- **Negativ** (rot): Der Netzstrom ist gerade billiger als der Strom im Akku – Entladen würde mehr kosten.
+
+Eine positive Ersparnis heißt nicht, dass BSFAI jetzt entlädt: Der Akku ist begrenzt, BSFAI hebt seine Energie für
+die teuersten Stunden auf, wo sie am meisten spart. Entladen wird erst über der Entladeschwelle.
 
 **Was die kWh aus dem Akku gekostet hat** („Akku-Strom kostet“ im Tooltip):
 
@@ -126,14 +132,26 @@ Die **Marge** zeigt, was eine kWh aus dem Akku zu einem bestimmten Preis einbrin
 - Solange BSFAI noch weniger als 20 kWh geladen hat, ist dieses Verhältnis zu ungenau. Dann rechnet die Preisampel
   ohne Ladeverluste und sagt das im Tooltip dazu.
 
-**BSFAI-Untergrenze** im Tooltip: Ø Ladepreis × (1 + Gewinnmarge-Regler). Das ist der Wert, mit dem BSFAI selbst
-rechnet – **ohne** Ladeverluste, die soll der Regler mit abdecken. Er geht zu 30 % in die Entladeschwelle ein,
-die übrigen 70 % kommen vom Markt (82 % der Peak-Schwelle). Bei günstig geladenem Akku verschiebt der Regler die
-Entladeschwelle deshalb nur wenig.
-
-Bitte beachten: Die Marge ist eine **Durchschnittsbetrachtung**. Der Ladepreis ist ein Mittel über die ganze
+Bitte beachten: Die Ersparnis ist eine **Durchschnittsbetrachtung**. Der Ladepreis ist ein Mittel über die ganze
 Laufzeit, nicht der Preis der Energie, die gerade im Akku steckt. Der Wirkungsgrad ist eine Näherung – was der Akku
 ins Netz statt ins Haus abgibt, zählt BSFAI nicht als Entladung.
+
+### Der Regler „Gewinnmarge“ – eigentlich ein Mindestabstand
+
+Am Schieber „Gewinnmarge“ zeigt die Preisampel neben den Prozent auch den Betrag in ct, der beim Verschieben
+mitläuft (z. B. „20 % · 3,8 ct/kWh“). Trotz des Namens geht es nicht um Gewinn, sondern um einen **Mindestabstand**:
+
+- **Entladen:** BSFAI hält preisbasiertes Entladen erst ab **Ø Ladepreis + Gewinnmarge** für sinnvoll. Die Prozent
+  beziehen sich auf den Ø Ladepreis, **nicht** auf den aktuellen Strompreis: 20 % von 18,9 ct = **3,8 ct** – das ist
+  der Betrag am Schieber. Er wandert nicht mit der Preiskurve, sondern ändert sich nur, wenn du den Schieber
+  bewegst oder – langsam – wenn sich der Ø Ladepreis durch neue Ladungen verschiebt.
+- **Laden aus dem Netz im Tal:** BSFAI lädt nur nach, wenn danach noch eine Preisspitze kommt, die mindestens
+  **Preis jetzt + Gewinnmarge** erreicht. Hier beziehen sich die Prozent auf den Preis der Viertelstunde.
+- BSFAI rechnet dabei **ohne** Ladeverluste – der Mindestabstand soll sie mit abdecken. Damit er die echten Kosten
+  erreicht, braucht es mindestens **1 ÷ Wirkungsgrad − 1**, bei 78 % also rund **28 %**.
+- Der Mindestabstand geht nur zu 30 % in die Entladeschwelle ein, die übrigen 70 % kommen vom Markt (82 % der
+  Peak-Schwelle). Bei günstig geladenem Akku verschiebt der Regler die Entladeschwelle deshalb nur wenig; wichtig
+  wird er an Tagen, an denen die Strompreise nah an den Akku-Kosten liegen.
 
 ## Bitte beachten
 

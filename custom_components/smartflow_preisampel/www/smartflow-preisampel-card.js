@@ -9,7 +9,7 @@
  * Simulator; ohne Simulation zeigt die Karte die fertig gerechnete Leiter.
  */
 
-const VERSION = "0.1.7";
+const VERSION = "0.1.8";
 const CARD = "smartflow-preisampel-card";
 const EDITOR = "smartflow-preisampel-card-editor";
 
@@ -41,11 +41,10 @@ const TEXT = {
     unavailable: "Keine Daten: Battery SmartFlow AI läuft nicht oder ist nicht kompatibel (siehe HA-Protokoll).",
     mismatch: "Achtung: Diese BSFAI-Version rechnet die Schwellen anders als die Ampel. Die Farben können abweichen.",
     no_prices: "BSFAI hat gerade keine Preisvorschau.",
-    margin_now: "Marge",
+    margin_now: "Ersparnis",
     cost: "Akku-Strom kostet",
     cost_eff: (avg, eff) => `Ø Ladepreis ${avg} ÷ Wirkungsgrad ${eff}`,
     cost_no_eff: (avg) => `Ø Ladepreis ${avg}, ohne Ladeverluste (noch zu wenig Messwerte)`,
-    worth: (pct) => `BSFAI-Untergrenze (+${pct} %)`,
     editor: { entity: "Preisampel-Sensor", title: "Titel", height: "Höhe", bsfai_style: "BSFAI-Stil (dunkel wie das Dashboard von Battery SmartFlow AI)", show_history: "Verlauf anzeigen (was BSFAI getan hat)", show_simulator: "Simulator anzeigen", simulation_on: "Simulator beim Öffnen eingeschaltet", colors: "Farben" },
     days: ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"],
   },
@@ -76,11 +75,10 @@ const TEXT = {
     unavailable: "No data: Battery SmartFlow AI is not running or not compatible (see the HA log).",
     mismatch: "Warning: this BSFAI version calculates its thresholds differently. Colours may be off.",
     no_prices: "BSFAI has no price forecast right now.",
-    margin_now: "Margin",
+    margin_now: "Saving",
     cost: "Battery energy costs",
     cost_eff: (avg, eff) => `avg. charge price ${avg} ÷ efficiency ${eff}`,
     cost_no_eff: (avg) => `avg. charge price ${avg}, without losses (not enough data yet)`,
-    worth: (pct) => `BSFAI floor (+${pct} %)`,
     editor: { entity: "Price traffic light sensor", title: "Title", height: "Height", bsfai_style: "BSFAI style (dark, like the Battery SmartFlow AI dashboard)", show_history: "Show history (what BSFAI did)", show_simulator: "Show simulator", simulation_on: "Simulator switched on when opened", colors: "Colours" },
     days: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   },
@@ -401,8 +399,7 @@ class SmartflowPreisampelCard extends HTMLElement {
     const avg = typeof L.avg_charge_price === "number" ? L.avg_charge_price : null;
     const eff = typeof L.efficiency === "number" && L.efficiency > 0 ? L.efficiency : null;
     const costOut = avg === null ? null : avg / (eff || 1);
-    const marginPct = this._sim && this._sim.on ? this._sim.margin : L.margin_pct;
-    return { ...v, n: L.n, t0, step, unit, nowIndex, currency: L.currency, avg, eff, costOut, marginPct };
+    return { ...v, n: L.n, t0, step, unit, nowIndex, currency: L.currency, avg, eff, costOut };
   }
 
   _update() {
@@ -675,8 +672,7 @@ class SmartflowPreisampelCard extends HTMLElement {
       const pct = (x) => `${Math.round(x * 100)} %`;
       html += row(t.cost, this._fmt(V.costOut, V.unit), null, sep)
         + `<div style="opacity:.65;font-size:.85em;">${V.eff ? t.cost_eff(this._fmt(V.avg, V.unit), pct(V.eff)) : t.cost_no_eff(this._fmt(V.avg, V.unit))}</div>`
-        + `<div style="display:flex;gap:12px;justify-content:space-between;font-weight:600;"><span>${t.margin_now}</span><span style="font-variant-numeric:tabular-nums;color:${this._marginColor(m)};">${this._fmtSigned(m, V.unit)}</span></div>`
-        + row(t.worth(Math.round(V.marginPct)), this._fmt(V.avg * (1 + V.marginPct / 100), V.unit), null);
+        + `<div style="display:flex;gap:12px;justify-content:space-between;font-weight:600;"><span>${t.margin_now}</span><span style="font-variant-numeric:tabular-nums;color:${this._marginColor(m)};">${this._fmtSigned(m, V.unit)}</span></div>`;
     }
     const act = this._config.show_history ? this._act : null;
     if (act && i <= V.nowIndex) {
@@ -834,7 +830,17 @@ class SmartflowPreisampelCard extends HTMLElement {
     const unit = this._hass.states[r.entity]?.attributes?.unit_of_measurement || "";
     const v = this._sim[key];
     const digits = (String(input.step).split(".")[1] || "").length;
-    input.parentElement.querySelector(".val").textContent = `${Number(v).toFixed(digits)} ${unit}`;
+    let text = `${Number(v).toFixed(digits)} ${unit}`;
+    if (key === "margin") {
+      // Einstellhilfe: was die Prozente in Geld bedeuten. BSFAI schlaegt die
+      // Gewinnmarge beim Entladen auf den Ø Ladepreis auf, nicht auf den
+      // aktuellen Strompreis (decision_engine._compute_economic_discharge_threshold).
+      const L = this._state()?.attributes?.ladder;
+      if (L && typeof L.avg_charge_price === "number") {
+        text += ` · ${this._fmt(L.avg_charge_price * v / 100, this._unit(L.currency))}`;
+      }
+    }
+    input.parentElement.querySelector(".val").textContent = text;
   }
 
   _markDirty() {

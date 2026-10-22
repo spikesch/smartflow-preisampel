@@ -33,7 +33,7 @@ Two styles, switchable with a toggle in the card editor:
 - **Simulator** with five sliders: valley discount, peak markup, profit margin, very-cheap and very-expensive threshold.
   The colours follow the sliders instantly while BSFAI keeps running on its real settings.
   Only **“Apply to BSFAI”** writes the changed values – after asking you – to BSFAI's settings.
-- **Margin** in the card header and the tooltip: what one kWh from the battery is worth at that price (see [What does the margin mean?](#what-does-the-margin-mean))
+- **Saving** in the header and the tooltip, the “profit margin” slider also shows its amount in ct (see [What does the saving mean?](#what-does-the-saving-mean))
 - **“Price level” sensor** with the current level, e.g. for your own automations
 - **Two styles**: standard (follows the HA theme) or BSFAI style (dark, like the Battery SmartFlow AI dashboard)
 - **Self-test**: the price traffic light continuously compares its thresholds with BSFAI's live values and
@@ -109,14 +109,20 @@ The formulas are re-implemented from BSFAI. For every slot the price traffic lig
 - **Discharge threshold** from the peak threshold, the average battery charge price plus profit margin and
   BSFAI's further rules
 
-## What does the margin mean?
+## What does the saving mean?
 
-The **margin** shows what one kWh from the battery is worth at a given price:
+The card header and the tooltip show the **saving**, for example “Saving +17.6 ct/kWh”:
 
-> **Margin = electricity price − what one kWh from the battery has cost**
+> **Saving = grid price − what one kWh from the battery has cost**
+
+A battery for self-consumption does not make a profit – it makes your electricity cheaper. The saving shows how much
+cheaper one kWh from the battery is than the same kWh from the grid.
 
 - **Positive** (green): energy from the battery is cheaper than energy from the grid – every kWh saves this amount.
-- **Negative** (red): grid energy is currently cheaper than the energy in the battery – discharging would lose money.
+- **Negative** (red): grid energy is currently cheaper than the energy in the battery – discharging would cost more.
+
+A positive saving does not mean BSFAI discharges now: the battery is limited and BSFAI keeps its energy for the most
+expensive hours, where it saves the most. It only discharges above the discharge threshold.
 
 **What one kWh from the battery has cost** (“Battery energy costs” in the tooltip):
 
@@ -128,14 +134,26 @@ The **margin** shows what one kWh from the battery is worth at a given price:
 - While BSFAI has charged less than 20 kWh in total, this ratio is too unreliable. The card then calculates without
   losses and says so in the tooltip.
 
-**BSFAI floor** in the tooltip: average charge price × (1 + profit margin setting). This is the value BSFAI itself
-works with – **without** charging losses, which the margin setting is meant to cover. It makes up 30 % of the
-discharge threshold, the other 70 % come from the market (82 % of the peak threshold). With a cheaply charged battery
-the setting therefore moves the discharge threshold only a little.
-
-Please note: the margin is an **average view**. The charge price is averaged over the whole runtime, not the price
-of the energy currently in the battery. The efficiency is an approximation – energy the battery exports to the grid
+Please note: the saving is an **average view**. The charge price is averaged over the whole runtime, not the price of
+the energy currently in the battery. The efficiency is an approximation – energy the battery exports to the grid
 instead of the house is not counted as discharge by BSFAI.
+
+### The “profit margin” setting – really a minimum gap
+
+Next to the “profit margin” slider the price traffic light shows the amount in ct as well, following the slider as
+you move it (e.g. “20 % · 3.8 ct/kWh”). Despite its name it is not about profit but a **minimum gap**:
+
+- **Discharging:** BSFAI only considers price-based discharging worthwhile from **average charge price + profit
+  margin**. The percentage refers to the average charge price, **not** the current electricity price: 20 % of
+  18.9 ct = **3.8 ct** – the amount shown at the slider. It does not follow the price curve; it only changes when you
+  move the slider or – slowly – when new charging shifts the average charge price.
+- **Grid charging at valley prices:** BSFAI only recharges if a later price peak reaches at least **current price +
+  profit margin**. Here the percentage refers to the price of that quarter hour.
+- BSFAI does this **without** charging losses – the minimum gap is meant to cover them. To reach the real cost you need
+  at least **1 ÷ efficiency − 1**, i.e. about **28 %** at 78 % efficiency.
+- The minimum gap makes up only 30 % of the discharge threshold, the other 70 % come from the market (82 % of the peak
+  threshold). With a cheaply charged battery the setting therefore moves the discharge threshold only a little; it
+  matters on days when electricity prices are close to the battery cost.
 
 ## Please note
 
