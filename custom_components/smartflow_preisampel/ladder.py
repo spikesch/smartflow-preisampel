@@ -44,7 +44,33 @@ def split_slots(points: list[tuple[datetime, datetime, float]]) -> list[tuple[da
                 seen.add(cursor)
             cursor += SLOT
     slots.sort(key=lambda item: item[0])
-    return slots
+    return fill_gaps(slots)
+
+
+# Laengste Luecke, die aufgefuellt wird (4 h) - laengere Ausfaelle bleiben sichtbar.
+MAX_GAP = timedelta(hours=4)
+
+
+def fill_gaps(slots: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
+    """Fehlende Viertelstunden mit dem Preis davor auffuellen.
+
+    Die Karte rechnet die Zeit jedes Slots als Start + Index x 15 min und
+    braucht ein lueckenloses Raster. Am Tag der Zeitumstellung im Herbst
+    liefert BSFAI die doppelte Stunde 02:00-03:00 nur einmal - ohne Auffuellen
+    waere danach alles um eine Stunde verschoben.
+    """
+    out: list[tuple[datetime, float]] = []
+    for start, price in slots:
+        if out:
+            last, last_price = out[-1]
+            gap = start - last
+            if SLOT < gap <= MAX_GAP:
+                cursor = last + SLOT
+                while cursor < start:
+                    out.append((cursor, last_price))
+                    cursor += SLOT
+        out.append((start, price))
+    return out
 
 
 def peak_threshold(average: float, low: float, high: float, peak_factor: float) -> float:
