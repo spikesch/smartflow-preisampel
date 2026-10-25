@@ -14,7 +14,7 @@ vergangene Slots in planning_price_points).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 SLOT = timedelta(minutes=15)
 
@@ -36,7 +36,11 @@ def split_slots(points: list[tuple[datetime, datetime, float]], fill: bool = Tru
     doppelte Intervalle nur einmal, angebrochene Reste am Ende verwerfen."""
     slots: list[tuple[datetime, float]] = []
     seen: set[datetime] = set()
-    for start, end, price in sorted(points, key=lambda item: item[0]):
+    # In UTC rechnen: Mit einer Zeitzone wie Europe/Berlin vergleicht und
+    # subtrahiert Python nach Wanduhr - die doppelte Stunde im Herbst gilt dann
+    # als "gleich" und Luecken sind unsichtbar (02:45 -> 03:00 = 15 statt 75 min).
+    utc = [(start.astimezone(timezone.utc), end.astimezone(timezone.utc), price) for start, end, price in points]
+    for start, end, price in sorted(utc, key=lambda item: item[0]):
         cursor = start
         while cursor + SLOT <= end:
             if cursor not in seen:
