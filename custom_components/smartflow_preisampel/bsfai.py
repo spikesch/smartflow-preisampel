@@ -56,29 +56,58 @@ class BsfaiReading:
 MIN_EFFICIENCY_KWH = 20.0
 
 
-def _battery(hass: HomeAssistant, coord: Any, get_setting: Any,
-             soc_entity: str | None) -> dict[str, float | None] | None:
-    """Akkugroesse, Grenzen und Leistungen fuer den Optimieren-Knopf der Karte.
+# Akku-Regler fuer die Ersparnis-Schaetzung: Schluessel in der Leiter -> BSFAI-Setting-Key
+BATTERY_SETTINGS = {
+    "soc_min": "soc_min",
+    "soc_max": "soc_max",
+    "max_charge_w": "max_charge",
+    "max_discharge_w": "max_discharge",
+    "base_load_w": "forecast_base_load",
+}
 
-    Kapazitaet ueber BSFAIs eigene Rechnung (_get_battery_capacity, intern),
-    die Regler ueber dieselben Setting-Keys wie BSFAIs number-Entities.
+
+def _setting_value(hass: HomeAssistant, entry_id: str, coord: Any, key: str) -> float | None:
+    """Wert eines BSFAI-Reglers, wie BSFAI ihn anzeigt.
+
+    Zuerst die number-Entity: sie zeigt auch BSFAIs Standardwert, wenn der
+    Nutzer den Regler nie verstellt hat. NICHT _get_setting(key, None) - fehlt
+    der Schluessel in den Optionen, ruft BSFAI float(None) auf und wirft.
+    """
+    entity_id = er.async_get(hass).async_get_entity_id("number", BSFAI_DOMAIN, f"{entry_id}_{key}")
+    state = hass.states.get(entity_id) if entity_id else None
+    value = _float(state.state, None) if state else None
+    if value is not None:
+        return value
+    runtime = getattr(coord, "runtime_settings", None) or {}
+    value = _float(runtime.get(key), None)
+    if value is not None:
+        return value
+    options = getattr(getattr(coord, "entry", None), "options", None) or {}
+    return _float(options.get(key), None)
+
+
+def _battery(hass: HomeAssistant, entry_id: str, coord: Any,
+             soc_entity: str | None) -> dict[str, float | None] | None:
+    """Akkugroesse, Grenzen und Leistungen fuer Ersparnis in Euro und Optimieren.
+
+    Rein optional: was hier schiefgeht, darf die Integration nicht aufhalten -
+    dann zeigt die Karte nur keinen Euro-Betrag und kann nicht optimieren.
     """
     try:
         capacity = float(coord._get_battery_capacity())
-    except Exception:  # noqa: BLE001
+        if not capacity > 0.0:
+            return None
+        state = hass.states.get(soc_entity) if soc_entity else None
+        result: dict[str, float | None] = {
+            "capacity_kwh": capacity,
+            "soc": _float(state.state, None) if state else None,
+        }
+        for name, key in BATTERY_SETTINGS.items():
+            result[name] = _setting_value(hass, entry_id, coord, key)
+        return result
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Akkudaten von BSFAI nicht lesbar: %s", err)
         return None
-    if not capacity > 0.0:
-        return None
-    state = hass.states.get(soc_entity) if soc_entity else None
-    return {
-        "capacity_kwh": capacity,
-        "soc": _float(state.state, None) if state else None,
-        "soc_min": _float(get_setting("soc_min", None), None),
-        "soc_max": _float(get_setting("soc_max", None), None),
-        "max_charge_w": _float(get_setting("max_charge", None), None),
-        "max_discharge_w": _float(get_setting("max_discharge", None), None),
-        "base_load_w": _float(get_setting("forecast_base_load", None), None),
-    }
 
 
 def _efficiency(economics: Any) -> float | None:
@@ -91,7 +120,7 @@ def _efficiency(economics: Any) -> float | None:
     try:
         charged = float(totals.grid_charge_kwh) + float(totals.pv_charge_kwh)
         discharged = float(totals.battery_discharge_kwh)
-    except (AttributeError, TypeError, ValueError):
+    except Exception:  # noqa: BLE001
         return None
     if charged < MIN_EFFICIENCY_KWH or discharged <= 0.0:
         return None
@@ -193,7 +222,7 @@ def read(hass: HomeAssistant, entry_id: str, now: datetime) -> BsfaiReading:
         live=live,
         entities=entities,
         efficiency=_efficiency(economics),
-        battery=_battery(hass, coord, get_setting, entities.get("soc")),
+        battery=_battery(hass, entry_id, coord, entities.get("soc")),
     )
 
 
