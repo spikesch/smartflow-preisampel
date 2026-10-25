@@ -31,7 +31,7 @@ class Settings:
     feed_in: float | None
 
 
-def split_slots(points: list[tuple[datetime, datetime, float]]) -> list[tuple[datetime, float]]:
+def split_slots(points: list[tuple[datetime, datetime, float]], fill: bool = True) -> list[tuple[datetime, float]]:
     """Wie planning_price_points: laengere Intervalle in 15-min-Slots zerlegen,
     doppelte Intervalle nur einmal, angebrochene Reste am Ende verwerfen."""
     slots: list[tuple[datetime, float]] = []
@@ -44,7 +44,7 @@ def split_slots(points: list[tuple[datetime, datetime, float]]) -> list[tuple[da
                 seen.add(cursor)
             cursor += SLOT
     slots.sort(key=lambda item: item[0])
-    return fill_gaps(slots)
+    return fill_gaps(slots) if fill else slots
 
 
 # Laengste Luecke, die aufgefuellt wird (4 h) - laengere Ausfaelle bleiben sichtbar.

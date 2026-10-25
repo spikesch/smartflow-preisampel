@@ -49,6 +49,8 @@ class BsfaiReading:
     entities: dict[str, str | None] = field(default_factory=dict)
     efficiency: float | None = None
     battery: dict[str, float | None] | None = None
+    # Hinweise fuer Diagnose und Debug-Protokoll (z. B. warum Akkudaten fehlen)
+    notes: list[str] = field(default_factory=list)
 
 
 # Unter dieser Lademenge haengt das Verhaeltnis Entladen/Laden noch stark vom
@@ -87,7 +89,7 @@ def _setting_value(hass: HomeAssistant, entry_id: str, coord: Any, key: str) -> 
 
 
 def _battery(hass: HomeAssistant, entry_id: str, coord: Any,
-             soc_entity: str | None) -> dict[str, float | None] | None:
+             soc_entity: str | None, notes: list[str]) -> dict[str, float | None] | None:
     """Akkugroesse, Grenzen und Leistungen fuer Ersparnis in Euro und Optimieren.
 
     Rein optional: was hier schiefgeht, darf die Integration nicht aufhalten -
@@ -96,6 +98,7 @@ def _battery(hass: HomeAssistant, entry_id: str, coord: Any,
     try:
         capacity = float(coord._get_battery_capacity())
         if not capacity > 0.0:
+            notes.append(f"Akkukapazitaet von BSFAI ist {capacity} - keine Akkudaten")
             return None
         state = hass.states.get(soc_entity) if soc_entity else None
         result: dict[str, float | None] = {
@@ -104,13 +107,16 @@ def _battery(hass: HomeAssistant, entry_id: str, coord: Any,
         }
         for name, key in BATTERY_SETTINGS.items():
             result[name] = _setting_value(hass, entry_id, coord, key)
+        missing = [name for name, value in result.items() if value is None]
+        if missing:
+            notes.append(f"Akkudaten unvollstaendig, fehlt: {', '.join(missing)}")
         return result
     except Exception as err:  # noqa: BLE001
-        _LOGGER.debug("Akkudaten von BSFAI nicht lesbar: %s", err)
+        notes.append(f"Akkudaten von BSFAI nicht lesbar: {type(err).__name__}: {err}")
         return None
 
 
-def _efficiency(economics: Any) -> float | None:
+def _efficiency(economics: Any, notes: list[str]) -> float | None:
     """Gemessener Wirkungsgrad seit Start: kWh aus dem Akku / kWh hinein.
 
     Aus BSFAIs Kostenbuch (EconomicsEngine._total, intern). Naeherung: was der
@@ -120,12 +126,17 @@ def _efficiency(economics: Any) -> float | None:
     try:
         charged = float(totals.grid_charge_kwh) + float(totals.pv_charge_kwh)
         discharged = float(totals.battery_discharge_kwh)
-    except Exception:  # noqa: BLE001
+    except Exception as err:  # noqa: BLE001
+        notes.append(f"Wirkungsgrad nicht lesbar: {type(err).__name__}: {err}")
         return None
     if charged < MIN_EFFICIENCY_KWH or discharged <= 0.0:
+        notes.append(f"Wirkungsgrad: erst {charged:.1f} kWh geladen (ab {MIN_EFFICIENCY_KWH:.0f} kWh) - ohne Ladeverluste")
         return None
     ratio = discharged / charged
-    return ratio if 0.5 <= ratio <= 1.0 else None
+    if not 0.5 <= ratio <= 1.0:
+        notes.append(f"Wirkungsgrad unplausibel ({ratio:.2f}) - ohne Ladeverluste")
+        return None
+    return ratio
 
 
 def coordinator(hass: HomeAssistant, entry_id: str) -> Any:
@@ -214,6 +225,10 @@ def read(hass: HomeAssistant, entry_id: str, now: datetime) -> BsfaiReading:
     }
 
     entities = entity_ids(hass, entry_id, coord)
+    notes: list[str] = []
+    missing = [key for key, entity_id in entities.items() if not entity_id]
+    if missing:
+        notes.append(f"BSFAI-Entities nicht gefunden: {', '.join(missing)}")
     return BsfaiReading(
         points=points,
         settings=settings,
@@ -221,8 +236,9 @@ def read(hass: HomeAssistant, entry_id: str, now: datetime) -> BsfaiReading:
         version=_version(),
         live=live,
         entities=entities,
-        efficiency=_efficiency(economics),
-        battery=_battery(hass, entry_id, coord, entities.get("soc")),
+        efficiency=_efficiency(economics, notes),
+        battery=_battery(hass, entry_id, coord, entities.get("soc"), notes),
+        notes=notes,
     )
 
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import traceback
+from collections import deque
 from datetime import timedelta
 from typing import Any
 
@@ -12,7 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from . import bsfai
 from .const import DOMAIN
-from .ladder import ladder, split_slots
+from .ladder import fill_gaps, ladder, split_slots
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +35,21 @@ class PreisampelCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.bsfai_entry_id = bsfai_entry_id
         self._bsfai_coord: Any = None
         self._unsub_bsfai: CALLBACK_TYPE | None = None
+        # Fuer "Diagnose herunterladen": die letzten Fehler/Hinweise und der
+        # Stand des letzten Abrufs - auch wenn die Einrichtung scheitert.
+        self.events: deque[dict[str, str]] = deque(maxlen=30)
+        self.last_info: dict[str, Any] = {}
+        self._last_notes: list[str] = []
+        self._last_selftest: str | None = None
+
+    def note(self, level: int, message: str) -> None:
+        """Ins HA-Protokoll schreiben und fuer die Diagnose merken."""
+        _LOGGER.log(level, message)
+        self.events.append({
+            "time": dt_util.now().isoformat(timespec="seconds"),
+            "level": logging.getLevelName(level),
+            "message": message,
+        })
 
     @callback
     def _follow_bsfai(self) -> None:
@@ -60,8 +77,20 @@ class PreisampelCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._bsfai_coord = None
 
     async def _async_update_data(self) -> dict[str, Any]:
+        try:
+            return self._update(dt_util.now())
+        except UpdateFailed as err:
+            self.note(logging.WARNING, str(err))
+            raise
+        except Exception as err:  # noqa: BLE001
+            # Unerwartet: mit den letzten Zeilen des Tracebacks merken, damit
+            # ein Fehlerbericht ohne HA-Protokoll auskommt.
+            tail = " | ".join(line.strip() for line in traceback.format_exc().strip().splitlines()[-6:])
+            self.note(logging.ERROR, f"Unerwarteter Fehler: {type(err).__name__}: {err} ({tail})")
+            raise UpdateFailed(f"{type(err).__name__}: {err}") from err
+
+    def _update(self, now: Any) -> dict[str, Any]:
         self._follow_bsfai()
-        now = dt_util.now()
         try:
             reading = bsfai.read(self.hass, self.bsfai_entry_id, now)
         except bsfai.BsfaiNotRunning as err:
@@ -69,7 +98,8 @@ class PreisampelCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except bsfai.BsfaiIncompatible as err:
             raise UpdateFailed(f"Battery SmartFlow AI nicht kompatibel: {err}") from err
 
-        slots = split_slots(reading.points)
+        raw = split_slots(reading.points, fill=False)
+        slots = fill_gaps(raw)
         result = ladder(slots, reading.settings, now)
         s = reading.settings
         result.update({
@@ -85,12 +115,47 @@ class PreisampelCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "efficiency": reading.efficiency,
             "battery": reading.battery,
         })
+        check = selftest(result, reading.live)
+        self._remember(reading, raw, slots, result, check, now)
         return {
             "ladder": result,
             "entities": reading.entities,
             "bsfai_version": reading.version,
-            "selftest": selftest(result, reading.live),
+            "selftest": check,
         }
+
+    def _remember(self, reading: Any, raw: list, slots: list, result: dict, check: dict, now: Any) -> None:
+        """Stand des Abrufs fuer die Diagnose; Hinweise und Selbsttest-Wechsel
+        nur bei Aenderung protokollieren, sonst liefe das Protokoll voll."""
+        self.last_info = {
+            "time": now.isoformat(timespec="seconds"),
+            "price_points_from_bsfai": len(reading.points),
+            "slots": len(slots),
+            "slots_filled": len(slots) - len(raw),
+            "first_slot": slots[0][0].isoformat() if slots else None,
+            "last_slot": slots[-1][0].isoformat() if slots else None,
+            "now_index": result.get("now_index"),
+            "selftest": check.get("status"),
+            "efficiency": reading.efficiency,
+            "battery_ok": reading.battery is not None,
+            "notes": reading.notes,
+        }
+        _LOGGER.debug("Abruf: %s Preispunkte, %s Slots (%s aufgefuellt), jetzt=%s, Selbsttest=%s, Wirkungsgrad=%s, Akkudaten=%s",
+                      len(reading.points), len(slots), len(slots) - len(raw), result.get("now_index"),
+                      check.get("status"), reading.efficiency, "ok" if reading.battery else "fehlen")
+        if reading.notes != self._last_notes:
+            for message in reading.notes:
+                self.note(logging.INFO, message)
+            self._last_notes = list(reading.notes)
+        if len(slots) != len(raw) and not any("aufgefuellt" in e["message"] for e in self.events):
+            self.note(logging.INFO, f"{len(slots) - len(raw)} fehlende Viertelstunden aufgefuellt (z. B. Zeitumstellung)")
+        status = check.get("status")
+        if status != self._last_selftest:
+            if status == "mismatch":
+                self.note(logging.WARNING, f"Selbsttest: Schwellen weichen von BSFAI ab ({check.get('values')})")
+            elif self._last_selftest == "mismatch":
+                self.note(logging.INFO, "Selbsttest wieder in Ordnung")
+            self._last_selftest = status
 
 
 def selftest(result: dict, live: dict[str, float | None]) -> dict:

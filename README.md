@@ -204,6 +204,20 @@ mitläuft (z. B. „20 % · 3,8 ct/kWh“). BSFAI nutzt die Gewinnmarge an zwei 
   Gesetzt werden nur die Regler, die du verschoben hast, und nur innerhalb der Grenzen, die BSFAI selbst vorgibt.
 - Die Preisampel enthält keinen Code von Battery SmartFlow AI, sie ruft die installierte Integration nur zur Laufzeit auf.
 
+## Fehler melden
+
+Wenn etwas nicht stimmt, helfen diese beiden Wege beim Fehlerbericht:
+
+1. **Diagnose herunterladen** – *Einstellungen → Geräte & Dienste → SmartFlow Preisampel → ⋮ → Diagnose
+   herunterladen*. Die Datei enthält die Versionen (Preisampel, BSFAI, Home Assistant), die gefundenen BSFAI-Regler
+   mit ihren Werten, Akkudaten, Wirkungsgrad, Selbsttest, eine Zusammenfassung der Preisdaten (Anzahl, Lücken) und
+   die **letzten Fehler und Hinweise mit Zeitpunkt** – auch dann, wenn die Einrichtung fehlschlägt. Preisreihen und
+   Zugangsdaten sind nicht enthalten.
+2. **Debug-Protokollierung** – auf derselben Seite *⋮ → Debug-Protokollierung aktivieren*, das Problem nachstellen,
+   dann *Debug-Protokollierung deaktivieren*. Home Assistant bietet danach das Protokoll zum Herunterladen an.
+
+Beides bitte an ein [Issue](https://github.com/spikesch/smartflow-preisampel/issues) anhängen.
+
 ## Für Entwickler
 
 `tests/harness/` ist ein Prüfstand, der die Karte ohne Home Assistant im Browser zeigt:

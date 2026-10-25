@@ -204,6 +204,19 @@ you move it (e.g. “20 % · 3.8 ct/kWh”). BSFAI uses the profit margin in two
   are written, and only within the limits BSFAI itself defines.
 - The price traffic light contains no code from Battery SmartFlow AI; it only calls the installed integration at runtime.
 
+## Reporting problems
+
+If something is wrong, these two ways help with a bug report:
+
+1. **Download diagnostics** – *Settings → Devices & services → SmartFlow Preisampel → ⋮ → Download diagnostics*.
+   The file contains the versions (price traffic light, BSFAI, Home Assistant), the BSFAI settings found and their
+   values, battery data, efficiency, self-test, a summary of the price data (count, gaps) and the **latest errors and
+   notes with timestamps** – even if the setup fails. Price series and credentials are not included.
+2. **Debug logging** – on the same page *⋮ → Enable debug logging*, reproduce the problem, then *Disable debug
+   logging*. Home Assistant then offers the log for download.
+
+Please attach both to an [issue](https://github.com/spikesch/smartflow-preisampel/issues).
+
 ## For developers
 
 `tests/harness/` is a test bench that renders the card in a browser without Home Assistant:
